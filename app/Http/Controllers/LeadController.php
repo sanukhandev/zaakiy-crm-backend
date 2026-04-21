@@ -11,7 +11,15 @@ class LeadController extends Controller
 
     public function __construct()
     {
-        $this->leadService = new LeadService();
+        // Lazy-load service
+    }
+
+    private function getService()
+    {
+        if (!$this->leadService) {
+            $this->leadService = new LeadService();
+        }
+        return $this->leadService;
     }
 
     public function index(Request $request)
@@ -20,7 +28,7 @@ class LeadController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $this->leadService->listLeads($auth)
+            'data' => $this->getService()->listLeads($auth)
         ]);
     }
 
@@ -28,7 +36,7 @@ class LeadController extends Controller
     {
         $auth = $request->attributes->get('auth');
 
-        $id = $this->leadService->createLead($auth, $request->all());
+        $id = $this->getService()->createLead($auth, $request->all());
 
         return response()->json([
             'success' => true,
@@ -40,7 +48,7 @@ class LeadController extends Controller
     {
         $auth = $request->attributes->get('auth');
 
-        $this->leadService->updateLead($auth, $id, $request->all());
+        $this->getService()->updateLead($auth, $id, $request->all());
 
         return response()->json([
             'success' => true

@@ -10,12 +10,20 @@ class LeadService
 
     public function __construct()
     {
-        $this->leadRepo = new LeadRepository();
+        // Lazy-load to avoid issues during route listing
+    }
+
+    private function getRepo()
+    {
+        if (!$this->leadRepo) {
+            $this->leadRepo = new LeadRepository();
+        }
+        return $this->leadRepo;
     }
 
     public function createLead($auth, $payload)
     {
-        return $this->leadRepo->create([
+        return $this->getRepo()->create([
             'tenant_id' => $auth['tenant_id'],
             'name' => $payload['name'] ?? null,
             'phone' => $payload['phone'] ?? null,
@@ -28,12 +36,12 @@ class LeadService
 
     public function listLeads($auth)
     {
-        return $this->leadRepo->getAll($auth['tenant_id']);
+        return $this->getRepo()->getAll($auth['tenant_id']);
     }
 
     public function updateLead($auth, $id, $payload)
     {
-        return $this->leadRepo->update(
+        return $this->getRepo()->update(
             $id,
             $auth['tenant_id'],
             $payload
