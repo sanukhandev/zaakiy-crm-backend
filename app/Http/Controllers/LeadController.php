@@ -9,7 +9,7 @@ class LeadController extends Controller
 {
     protected $leadService;
 
-     public function __construct(LeadService $leadService)
+    public function __construct(LeadService $leadService)
     {
         $this->leadService = $leadService;
     }
