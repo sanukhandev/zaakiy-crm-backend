@@ -23,15 +23,29 @@ class LeadService
 
     public function createLead($auth, $payload)
     {
-        return $this->getRepo()->create([
+        $duplicate = $this->leadRepo->findDuplicate(
+            $auth['tenant_id'],
+            $payload,
+        );
+
+        if ($duplicate) {
+            return [
+                'duplicate' => true,
+                'data' => $duplicate,
+            ];
+        }
+
+        $id = $this->leadRepo->create([
             'tenant_id' => $auth['tenant_id'],
-            'name' => $payload['name'] ?? null,
+            'name' => $payload['name'],
             'phone' => $payload['phone'] ?? null,
             'email' => $payload['email'] ?? null,
-            'source' => $payload['source'] ?? 'website',
-            'status' => 'new',
+            'source' => $payload['source'] ?? null,
+            'status' => $payload['status'] ?? 'new',
             'metadata' => json_encode($payload['metadata'] ?? []),
         ]);
+
+        return ['id' => $id];
     }
 
     public function listLeads($auth, $params)
@@ -42,5 +56,10 @@ class LeadService
     public function updateLead($auth, $id, $payload)
     {
         return $this->getRepo()->update($id, $auth['tenant_id'], $payload);
+    }
+
+    public function deleteLead($auth, $id)
+    {
+        return $this->getRepo()->delete($id, $auth['tenant_id']);
     }
 }

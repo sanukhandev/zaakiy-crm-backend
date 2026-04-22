@@ -27,13 +27,8 @@ class LeadController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $data->items(),
-            'meta' => [
-                'current_page' => $data->currentPage(),
-                'last_page' => $data->lastPage(),
-                'per_page' => $data->perPage(),
-                'total' => $data->total(),
-            ],
+            'data' => $data,
+            'message' => 'Leads fetched successfully',
         ]);
     }
 
@@ -41,11 +36,23 @@ class LeadController extends Controller
     {
         $auth = $request->attributes->get('auth');
 
-        $id = $this->getService()->createLead($auth, $request->all());
+        $result = $this->getService()->createLead($auth, $request->all());
+
+        if (isset($result['duplicate']) && $result['duplicate']) {
+            return response()->json(
+                [
+                    'success' => false,
+                    'message' => 'Duplicate lead found',
+                    'data' => $result['data'],
+                ],
+                409,
+            );
+        }
 
         return response()->json([
             'success' => true,
-            'id' => $id,
+            'data' => $result,
+            'message' => 'Lead created successfully',
         ]);
     }
 
@@ -57,6 +64,19 @@ class LeadController extends Controller
 
         return response()->json([
             'success' => true,
+            'message' => 'Lead updated successfully',
+        ]);
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $auth = $request->attributes->get('auth');
+
+        $this->getService()->deleteLead($auth, $id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Lead deleted successfully',
         ]);
     }
 }

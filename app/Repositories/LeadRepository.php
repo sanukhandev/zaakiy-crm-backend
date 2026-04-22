@@ -52,11 +52,32 @@ class LeadRepository
         return $query->paginate($filters['per_page'] ?? 10);
     }
 
-    public function update($id, $tenantId, $data)
+    public function update($id, $auth, $payload)
+    {
+        return DB::table('leads')
+            ->where('id', $id)
+            ->where('tenant_id', $auth['tenant_id'])
+            ->update($payload);
+    }
+    public function findDuplicate($tenantId, $data)
+    {
+        return DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->where(function ($q) use ($data) {
+                if (!empty($data['email'])) {
+                    $q->orWhere('email', $data['email']);
+                }
+                if (!empty($data['phone'])) {
+                    $q->orWhere('phone', $data['phone']);
+                }
+            })
+            ->first();
+    }
+    public function delete($id, $tenantId)
     {
         return DB::table('leads')
             ->where('id', $id)
             ->where('tenant_id', $tenantId)
-            ->update($data);
+            ->update(['deleted_at' => now()]);
     }
 }

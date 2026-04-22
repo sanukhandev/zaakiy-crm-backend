@@ -20,6 +20,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/leads', [LeadController::class, 'index']);
         Route::post('/leads', [LeadController::class, 'store']);
         Route::patch('/leads/{id}', [LeadController::class, 'update']);
+        Route::delete('/leads/{id}', [LeadController::class, 'destroy']);
     });
 });
 
