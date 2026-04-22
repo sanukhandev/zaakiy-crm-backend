@@ -51,6 +51,11 @@ class LeadService
         return $this->leadRepo->update($id, $auth, $payload);
     }
 
+    public function moveLead(string $id, array $auth, array $payload)
+    {
+        return $this->leadRepo->moveLead($id, $auth, $payload);
+    }
+
     public function deleteLead(array $auth, string $id): bool
     {
         return $this->leadRepo->delete($id, $auth['tenant_id']);

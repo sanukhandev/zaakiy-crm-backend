@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\DocsController;
+use App\Http\Controllers\PipelineController;
 
 Route::prefix('v1')->group(function () {
     Route::get('/health', function () {
@@ -17,6 +18,7 @@ Route::prefix('v1')->group(function () {
             ]);
         });
         Route::get('/session', [SessionController::class, 'getSession']);
+        Route::get('/pipeline', [PipelineController::class, 'index']);
         Route::get('/leads', [LeadController::class, 'index']);
         Route::post('/leads', [LeadController::class, 'store']);
 
@@ -36,6 +38,7 @@ Route::prefix('v1')->group(function () {
             'storeActivity',
         ]);
 
+        Route::patch('/leads/{id}/move', [LeadController::class, 'move']);
         Route::patch('/leads/{id}', [LeadController::class, 'update']);
         Route::delete('/leads/{id}', [LeadController::class, 'destroy']);
     });

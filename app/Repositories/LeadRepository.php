@@ -15,6 +15,18 @@ class LeadRepository
 
     private function bustCache(string $tenantId): void
     {
+        $store = Cache::getStore();
+
+        if (method_exists($store, 'tags')) {
+            try {
+                Cache::tags(['leads', $tenantId])->flush();
+
+                return;
+            } catch (\Throwable) {
+                // Fallback to key-based invalidation for non-taggable stores.
+            }
+        }
+
         Cache::forget($this->cacheKey($tenantId));
     }
 
@@ -77,6 +89,27 @@ class LeadRepository
 
         // Pagination
         return $query->paginate($perPage);
+    }
+
+    public function getPipeline(string $tenantId): array
+    {
+        $stages = ['new', 'contacted', 'qualified', 'won', 'lost'];
+        $grouped = array_fill_keys($stages, []);
+
+        $leads = DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->orderBy('status')
+            ->orderBy('position')
+            ->get();
+
+        foreach ($leads as $lead) {
+            if (array_key_exists($lead->status, $grouped)) {
+                $grouped[$lead->status][] = $lead;
+            }
+        }
+
+        return $grouped;
     }
 
     public function update(string $id, array $auth, array $payload): object
@@ -166,6 +199,46 @@ class LeadRepository
         return DB::table('leads')
             ->where('id', $id)
             ->where('tenant_id', $auth['tenant_id'])
+            ->first();
+    }
+
+    public function moveLead(string $id, array $auth, array $payload): object
+    {
+        $lead = $this->ensureLeadExistsForTenant($id, $auth['tenant_id']);
+
+        DB::transaction(function () use ($id, $auth, $payload, $lead) {
+            $updateData = [
+                'position' => (int) $payload['position'],
+                'updated_at' => now(),
+            ];
+
+            if ($payload['status'] !== $lead->status) {
+                $updateData['status'] = $payload['status'];
+
+                DB::table('lead_status_history')->insert([
+                    'id' => (string) Str::uuid(),
+                    'lead_id' => $id,
+                    'old_status' => $lead->status,
+                    'new_status' => $payload['status'],
+                    'changed_by' => $auth['user_id'],
+                    'created_at' => now(),
+                ]);
+            }
+
+            DB::table('leads')
+                ->where('id', $id)
+                ->where('tenant_id', $auth['tenant_id'])
+                ->whereNull('deleted_at')
+                ->update($updateData);
+        });
+
+        $this->bustCache($auth['tenant_id']);
+
+        return DB::table('leads')
+            ->select(['id', 'status', 'position'])
+            ->where('id', $id)
+            ->where('tenant_id', $auth['tenant_id'])
+            ->whereNull('deleted_at')
             ->first();
     }
     public function findDuplicate(string $tenantId, array $data): ?object
