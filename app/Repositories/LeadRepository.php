@@ -11,12 +11,31 @@ class LeadRepository
         return DB::table('leads')->insertGetId($data);
     }
 
-    public function getAll($tenantId)
+    public function getPaginated($tenantId, $filters = [])
     {
-        return DB::table('leads')
-            ->where('tenant_id', $tenantId)
+        $query = DB::table('leads')->where('tenant_id', $tenantId);
+
+        // Filters
+        if (!empty($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
+
+        if (!empty($filters['source'])) {
+            $query->where('source', $filters['source']);
+        }
+
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'ilike', "%$search%")
+                    ->orWhere('email', 'ilike', "%$search%")
+                    ->orWhere('phone', 'ilike', "%$search%");
+            });
+        }
+
+        return $query
             ->orderByDesc('created_at')
-            ->get();
+            ->paginate($filters['per_page'] ?? 10);
     }
 
     public function update($id, $tenantId, $data)

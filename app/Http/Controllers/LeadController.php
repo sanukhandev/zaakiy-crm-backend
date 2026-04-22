@@ -9,9 +9,9 @@ class LeadController extends Controller
 {
     protected $leadService;
 
-    public function __construct()
+     public function __construct(LeadService $leadService)
     {
-        // Lazy-load service
+        $this->leadService = $leadService;
     }
 
     private function getService()
@@ -26,9 +26,17 @@ class LeadController extends Controller
     {
         $auth = $request->attributes->get('auth');
 
+        $data = $this->leadService->listLeads($auth, $request->all());
+
         return response()->json([
             'success' => true,
-            'data' => $this->getService()->listLeads($auth),
+            'data' => $data->items(),
+            'meta' => [
+                'current_page' => $data->currentPage(),
+                'last_page' => $data->lastPage(),
+                'per_page' => $data->perPage(),
+                'total' => $data->total(),
+            ],
         ]);
     }
 

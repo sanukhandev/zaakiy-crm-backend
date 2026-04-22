@@ -34,9 +34,9 @@ class LeadService
         ]);
     }
 
-    public function listLeads($auth)
+    public function listLeads($auth, $params)
     {
-        return $this->getRepo()->getAll($auth['tenant_id']);
+        return $this->leadRepo->getPaginated($auth['tenant_id'], $params);
     }
 
     public function updateLead($auth, $id, $payload)
