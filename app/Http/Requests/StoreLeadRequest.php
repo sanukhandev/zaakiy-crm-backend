@@ -28,7 +28,25 @@ class StoreLeadRequest extends FormRequest
             'email' => 'nullable|email|max:255',
             'source' => 'nullable|string|max:50',
             'status' => 'nullable|string|in:new,contacted,qualified,lost,won',
+            'assigned_to' => 'nullable|uuid',
             'metadata' => 'nullable|array',
+        ];
+    }
+
+    protected function prepareForValidation()
+    {
+        $this->merge([
+            'email' => $this->email ? strtolower(trim($this->email)) : null,
+            'phone' => $this->phone ? trim($this->phone) : null,
+        ]);
+    }
+
+    public function messages(): array
+    {
+        return [
+            'name.required' => 'Lead name is required',
+            'status.in' => 'Invalid status value',
+            'email.email' => 'Invalid email format',
         ];
     }
 }

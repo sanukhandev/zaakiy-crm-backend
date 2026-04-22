@@ -3,27 +3,19 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Services\LeadService;
 
 class LeadController extends Controller
 {
-    protected $leadService;
+    public function __construct(protected LeadService $leadService) {}
 
-    public function __construct(LeadService $leadService)
-    {
-        $this->leadService = $leadService;
-    }
-
-    private function getService()
-    {
-        return $this->leadService;
-    }
-
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         $auth = $request->attributes->get('auth');
 
-        $data = $this->leadService->listLeads($auth, $request->all());
+        $data = $this->leadService->listLeads($auth, $request->query());
 
         return response()->json([
             'success' => true,
@@ -32,11 +24,12 @@ class LeadController extends Controller
         ]);
     }
 
-    public function store(\App\Http\Requests\StoreLeadRequest $request)
-    {
+    public function store(
+        \App\Http\Requests\StoreLeadRequest $request,
+    ): JsonResponse {
         $auth = $request->attributes->get('auth');
 
-        $result = $this->getService()->createLead($auth, $request->validated());
+        $result = $this->leadService->createLead($auth, $request->validated());
 
         if (isset($result['duplicate']) && $result['duplicate']) {
             return response()->json(
@@ -56,11 +49,20 @@ class LeadController extends Controller
         ]);
     }
 
-    public function update(\App\Http\Requests\UpdateLeadRequest $request, $id)
-    {
+    public function update(
+        \App\Http\Requests\UpdateLeadRequest $request,
+        int $id,
+    ): JsonResponse {
         $auth = $request->attributes->get('auth');
 
-        $this->getService()->updateLead($auth, $id, $request->validated());
+        try {
+            $this->leadService->updateLead($auth, $id, $request->validated());
+        } catch (ModelNotFoundException) {
+            return response()->json(
+                ['success' => false, 'message' => 'Lead not found'],
+                404,
+            );
+        }
 
         return response()->json([
             'success' => true,
@@ -68,11 +70,18 @@ class LeadController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, $id)
+    public function destroy(Request $request, int $id): JsonResponse
     {
         $auth = $request->attributes->get('auth');
 
-        $this->getService()->deleteLead($auth, $id);
+        try {
+            $this->leadService->deleteLead($auth, $id);
+        } catch (ModelNotFoundException) {
+            return response()->json(
+                ['success' => false, 'message' => 'Lead not found'],
+                404,
+            );
+        }
 
         return response()->json([
             'success' => true,

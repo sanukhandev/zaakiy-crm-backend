@@ -22,14 +22,18 @@ class AuthMiddleware
             }
 
             $jwks = Cache::remember('supabase_jwks', 3600, function () {
-                $response = Http::withoutVerifying()
-                    ->withHeaders([
-                        'apikey' => env('SUPABASE_ANON_KEY'),
-                        'Accept' => 'application/json',
-                    ])
-                    ->get(
-                        env('SUPABASE_URL') . '/auth/v1/.well-known/jwks.json',
-                    );
+                $http = Http::timeout(10)->withHeaders([
+                    'apikey' => env('SUPABASE_ANON_KEY'),
+                    'Accept' => 'application/json',
+                ]);
+
+                if (!app()->environment('production')) {
+                    $http = $http->withoutVerifying();
+                }
+
+                $response = $http->get(
+                    env('SUPABASE_URL') . '/auth/v1/.well-known/jwks.json',
+                );
 
                 if (!$response->successful()) {
                     throw new \Exception(
@@ -57,7 +61,11 @@ class AuthMiddleware
                 return response()->json(['message' => 'Invalid token'], 401);
             }
 
-            $user = DB::table('users')->where('id', $userId)->first();
+            $user = Cache::remember(
+                'auth_user_' . $userId,
+                300,
+                fn() => DB::table('users')->where('id', $userId)->first(),
+            );
 
             if (!$user) {
                 return response()->json(['message' => 'User not found'], 401);

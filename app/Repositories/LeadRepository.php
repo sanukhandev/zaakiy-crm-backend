@@ -7,14 +7,35 @@ use Illuminate\Support\Facades\Cache;
 
 class LeadRepository
 {
-    public function create($data)
+    private function cacheKey(string $tenantId): string
     {
-        return DB::table('leads')->insertGetId($data);
+        return 'leads_' . $tenantId;
     }
 
-    public function getPaginated($tenantId, $filters = [])
+    private function bustCache(string $tenantId): void
     {
-        $query = DB::table('leads')->where('tenant_id', $tenantId);
+        Cache::forget($this->cacheKey($tenantId));
+    }
+
+    public function create(array $data): int
+    {
+        $data['created_at'] = now();
+        $data['updated_at'] = now();
+
+        $id = DB::table('leads')->insertGetId($data);
+
+        $this->bustCache($data['tenant_id']);
+
+        return $id;
+    }
+
+    public function getPaginated(string $tenantId, array $filters = [])
+    {
+        $perPage = min((int) ($filters['per_page'] ?? 10), 100);
+
+        $query = DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at');
 
         // Filter: status
         if (!empty($filters['status'])) {
@@ -53,12 +74,12 @@ class LeadRepository
         $query->orderBy($sortBy, $sortOrder);
 
         // Pagination
-        return $query->paginate($filters['per_page'] ?? 10);
+        return $query->paginate($perPage);
     }
 
-    public function update($id, $auth, $payload)
+    public function update(int $id, array $auth, array $payload): object
     {
-        // 1. Fetch existing lead
+        // 1. Fetch existing lead (excludes soft-deleted)
         $lead = DB::table('leads')
             ->where('id', $id)
             ->where('tenant_id', $auth['tenant_id'])
@@ -66,7 +87,9 @@ class LeadRepository
             ->first();
 
         if (!$lead) {
-            throw new \Exception('Lead not found');
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException(
+                'Lead not found',
+            );
         }
 
         // 2. Prepare update data (whitelist fields)
@@ -98,31 +121,43 @@ class LeadRepository
                 : $payload['metadata']; // already JSON string
         }
 
-        // 4. Handle status change (with history)
+        // 4. Stage status change (history written inside transaction below)
         if (isset($payload['status']) && $payload['status'] !== $lead->status) {
-            // Insert status history
-            DB::table('lead_status_history')->insert([
-                'lead_id' => $id,
-                'old_status' => $lead->status,
-                'new_status' => $payload['status'],
-                'changed_by' => $auth['user_id'],
-                'created_at' => now(),
-            ]);
-
             $updateData['status'] = $payload['status'];
         }
 
         // 5. Add updated timestamp
         $updateData['updated_at'] = now();
 
-        // 6. Perform update
-        DB::table('leads')
-            ->where('id', $id)
-            ->where('tenant_id', $auth['tenant_id'])
-            ->update($updateData);
+        // 6. Perform update + status history atomically
+        DB::transaction(function () use (
+            $id,
+            $auth,
+            $payload,
+            $lead,
+            $updateData,
+        ) {
+            if (
+                isset($payload['status']) &&
+                $payload['status'] !== $lead->status
+            ) {
+                DB::table('lead_status_history')->insert([
+                    'lead_id' => $id,
+                    'old_status' => $lead->status,
+                    'new_status' => $payload['status'],
+                    'changed_by' => $auth['user_id'],
+                    'created_at' => now(),
+                ]);
+            }
 
-        // 7. Cache invalidation (important)
-        Cache::flush(); // simple for now (later optimize with tags)
+            DB::table('leads')
+                ->where('id', $id)
+                ->where('tenant_id', $auth['tenant_id'])
+                ->update($updateData);
+        });
+
+        // 7. Targeted cache invalidation — do NOT flush entire cache
+        $this->bustCache($auth['tenant_id']);
 
         // 8. Return updated lead
         return DB::table('leads')
@@ -130,25 +165,44 @@ class LeadRepository
             ->where('tenant_id', $auth['tenant_id'])
             ->first();
     }
-    public function findDuplicate($tenantId, $data)
+    public function findDuplicate(string $tenantId, array $data): ?object
     {
+        $hasEmail = !empty($data['email']);
+        $hasPhone = !empty($data['phone']);
+
+        if (!$hasEmail && !$hasPhone) {
+            return null;
+        }
+
         return DB::table('leads')
             ->where('tenant_id', $tenantId)
-            ->where(function ($q) use ($data) {
-                if (!empty($data['email'])) {
+            ->whereNull('deleted_at')
+            ->where(function ($q) use ($data, $hasEmail, $hasPhone) {
+                if ($hasEmail) {
                     $q->orWhere('email', $data['email']);
                 }
-                if (!empty($data['phone'])) {
+                if ($hasPhone) {
                     $q->orWhere('phone', $data['phone']);
                 }
             })
             ->first();
     }
-    public function delete($id, $tenantId)
+    public function delete(int $id, string $tenantId): bool
     {
-        return DB::table('leads')
+        $affected = DB::table('leads')
             ->where('id', $id)
             ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
             ->update(['deleted_at' => now()]);
+
+        if (!$affected) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException(
+                'Lead not found',
+            );
+        }
+
+        $this->bustCache($tenantId);
+
+        return true;
     }
 }
