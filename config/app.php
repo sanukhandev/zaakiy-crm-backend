@@ -96,6 +96,18 @@ return [
 
     'cipher' => 'AES-256-CBC',
 
+    /*
+    |--------------------------------------------------------------------------
+    | Schema Compatibility Checks
+    |--------------------------------------------------------------------------
+    |
+    | Enable startup schema validation and optionally fail hard on incompatibilities.
+    |
+    */
+
+    'schema_compat_check_on_boot' => env('SCHEMA_COMPAT_CHECK_ON_BOOT', true),
+    'schema_compat_fail_hard' => env('SCHEMA_COMPAT_FAIL_HARD', false),
+
     'key' => env('APP_KEY'),
 
     'previous_keys' => [

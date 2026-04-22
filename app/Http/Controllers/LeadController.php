@@ -10,6 +10,7 @@ use App\Support\ApiResponse;
 use App\Http\Requests\Lead\BulkLeadAssignRequest;
 use App\Http\Requests\Lead\BulkLeadDeleteRequest;
 use App\Http\Requests\Lead\BulkLeadUpdateRequest;
+use App\Http\Requests\Lead\MoveLeadRequest;
 use App\Http\Requests\Lead\StoreLeadActivityRequest;
 
 class LeadController extends Controller
@@ -104,6 +105,26 @@ class LeadController extends Controller
         }
 
         return $this->success(null, 'Lead deleted successfully');
+    }
+
+    public function move(MoveLeadRequest $request, string $id): JsonResponse
+    {
+        $auth = $this->resolveAuth($request);
+        if (!$auth) {
+            return $this->failure('Unauthorized', null, [], 401);
+        }
+
+        try {
+            $data = $this->leadService->moveLead(
+                $id,
+                $auth,
+                $request->validated(),
+            );
+        } catch (ModelNotFoundException) {
+            return $this->failure('Lead not found', null, [], 404);
+        }
+
+        return $this->success($data, 'Lead moved successfully');
     }
 
     public function storeActivity(
