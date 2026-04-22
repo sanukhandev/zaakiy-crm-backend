@@ -8,7 +8,7 @@ class LeadService
 {
     protected $leadRepo;
 
-   public function __construct(LeadRepository $leadRepo)
+    public function __construct(LeadRepository $leadRepo)
     {
         $this->leadRepo = $leadRepo;
     }
