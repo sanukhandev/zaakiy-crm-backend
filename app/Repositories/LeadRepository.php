@@ -88,13 +88,14 @@ class LeadRepository
             $updateData['source'] = $payload['source'];
         }
 
-        if (isset($payload['assigned_to'])) {
-            $updateData['assigned_to'] = $payload['assigned_to'];
-        }
+        $updateData['assigned_to'] =
+            $payload['assigned_to'] ?? $auth['user_id'];
 
         // 3. Handle metadata safely
         if (isset($payload['metadata'])) {
-            $updateData['metadata'] = json_encode($payload['metadata']);
+            $updateData['metadata'] = is_array($payload['metadata'])
+                ? json_encode($payload['metadata'])
+                : $payload['metadata']; // already JSON string
         }
 
         // 4. Handle status change (with history)

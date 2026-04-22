@@ -56,7 +56,7 @@ class LeadService
 
     public function updateLead($auth, $id, $payload)
     {
-        return $this->getRepo()->update($id, $auth['tenant_id'], $payload);
+        return $this->getRepo()->update($id, $auth, $payload);
     }
 
     public function deleteLead($auth, $id)

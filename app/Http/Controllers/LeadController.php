@@ -32,11 +32,11 @@ class LeadController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(\App\Http\Requests\StoreLeadRequest $request)
     {
         $auth = $request->attributes->get('auth');
 
-        $result = $this->getService()->createLead($auth, $request->all());
+        $result = $this->getService()->createLead($auth, $request->validated());
 
         if (isset($result['duplicate']) && $result['duplicate']) {
             return response()->json(
@@ -56,11 +56,11 @@ class LeadController extends Controller
         ]);
     }
 
-    public function update(Request $request, $id)
+    public function update(\App\Http\Requests\UpdateLeadRequest $request, $id)
     {
         $auth = $request->attributes->get('auth');
 
-        $this->getService()->updateLead($auth, $id, $request->all());
+        $this->getService()->updateLead($auth, $id, $request->validated());
 
         return response()->json([
             'success' => true,
