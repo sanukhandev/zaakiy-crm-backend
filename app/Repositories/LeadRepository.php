@@ -144,6 +144,7 @@ class LeadRepository
                 $payload['status'] !== $lead->status
             ) {
                 DB::table('lead_status_history')->insert([
+                    'id' => (string) Str::uuid(),
                     'lead_id' => $id,
                     'old_status' => $lead->status,
                     'new_status' => $payload['status'],
@@ -308,6 +309,7 @@ class LeadRepository
                 $historyRows = $existing
                     ->map(function ($row) use ($auth, $payload) {
                         return [
+                            'id' => (string) Str::uuid(),
                             'lead_id' => $row->id,
                             'old_status' => $row->status,
                             'new_status' => $payload['status'],

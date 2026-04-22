@@ -4,8 +4,10 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 
@@ -56,27 +58,85 @@ class AuthMiddleware
             $decoded = JWT::decode($token, $keys);
 
             $supabaseUserId = $decoded->sub ?? null;
-            $tenantId =
-                $decoded->tenant_id ??
-                ($decoded->app_metadata->tenant_id ??
-                    $request->header('X-Tenant-Id'));
+            $jwtEmail = $decoded->email ?? null;
 
             if (!$supabaseUserId) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
 
+            $userContext = Cache::remember(
+                'auth_user_ctx_' . $supabaseUserId,
+                300,
+                function () use ($supabaseUserId, $jwtEmail) {
+                    try {
+                        if (!Schema::hasTable('users')) {
+                            return null;
+                        }
+
+                        $user = null;
+
+                        if (Schema::hasColumn('users', 'supabase_user_id')) {
+                            $user = DB::table('users')
+                                ->where('supabase_user_id', $supabaseUserId)
+                                ->first();
+                        }
+
+                        if (!$user) {
+                            $user = DB::table('users')
+                                ->where('id', $supabaseUserId)
+                                ->first();
+                        }
+
+                        if (!$user && $jwtEmail) {
+                            $user = DB::table('users')
+                                ->where('email', $jwtEmail)
+                                ->first();
+                        }
+
+                        if (!$user) {
+                            return null;
+                        }
+
+                        return [
+                            'id' => $user->id ?? null,
+                            'tenant_id' => $user->tenant_id ?? null,
+                            'role' => $user->role ?? null,
+                        ];
+                    } catch (\Throwable) {
+                        // If user lookup fails, middleware continues with token/header fallbacks.
+                        return null;
+                    }
+                },
+            );
+
+            $tenantId =
+                $userContext['tenant_id'] ??
+                ($decoded->tenant_id ??
+                    ($decoded->tenantId ??
+                        ($decoded->org_id ??
+                            ($decoded->app_metadata->tenant_id ??
+                                ($decoded->app_metadata->tenantId ??
+                                    ($request->header('X-Tenant-Id') ??
+                                        config(
+                                            'services.supabase.default_tenant_id',
+                                        )))))));
+
             if (empty($tenantId)) {
                 return response()->json(
-                    ['message' => 'Tenant missing in token claims'],
+                    [
+                        'message' =>
+                            'Tenant context could not be resolved. Provide tenant_id claim, X-Tenant-Id header, or SUPABASE_DEFAULT_TENANT_ID.',
+                    ],
                     403,
                 );
             }
 
             $request->attributes->set('auth', [
                 'user_id' => $supabaseUserId,
+                'internal_user_id' => $userContext['id'] ?? null,
                 'tenant_id' => $tenantId,
-                'role' => $decoded->role ?? null,
-                'email' => $decoded->email ?? null,
+                'role' => $userContext['role'] ?? ($decoded->role ?? null),
+                'email' => $jwtEmail,
             ]);
 
             return $next($request);
