@@ -28,6 +28,7 @@ trait ApiResponse
         mixed $data = null,
         array $meta = [],
         int $status = 400,
+        array $errors = [],
     ): JsonResponse {
         return response()->json(
             [
@@ -35,6 +36,7 @@ trait ApiResponse
                 'data' => $data,
                 'meta' => $meta,
                 'message' => $message,
+                'errors' => $errors,
             ],
             $status,
         );

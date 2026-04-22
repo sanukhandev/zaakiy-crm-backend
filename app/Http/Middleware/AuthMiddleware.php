@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 use Firebase\JWT\Key;
@@ -98,7 +99,20 @@ class AuthMiddleware
             $token = $request->bearerToken();
 
             if (!$token) {
-                return response()->json(['message' => 'No token'], 401);
+                Log::warning('Authentication failed: bearer token missing', [
+                    'path' => $request->path(),
+                    'ip' => $request->ip(),
+                ]);
+                return response()->json(
+                    [
+                        'success' => false,
+                        'message' => 'No token',
+                        'errors' => [
+                            'auth' => ['Bearer token is required'],
+                        ],
+                    ],
+                    401,
+                );
             }
 
             $decoded = $this->decodeToken($token);
@@ -107,7 +121,16 @@ class AuthMiddleware
             $jwtEmail = $decoded->email ?? null;
 
             if (!$supabaseUserId) {
-                return response()->json(['message' => 'Invalid token'], 401);
+                return response()->json(
+                    [
+                        'success' => false,
+                        'message' => 'Invalid token',
+                        'errors' => [
+                            'auth' => ['JWT subject is missing'],
+                        ],
+                    ],
+                    401,
+                );
             }
 
             $userContext = Cache::remember(
@@ -170,8 +193,14 @@ class AuthMiddleware
             if (empty($tenantId)) {
                 return response()->json(
                     [
+                        'success' => false,
                         'message' =>
                             'Tenant context could not be resolved. Provide tenant_id claim, X-Tenant-Id header, or SUPABASE_DEFAULT_TENANT_ID.',
+                        'errors' => [
+                            'tenant_id' => [
+                                'Tenant context could not be resolved',
+                            ],
+                        ],
                     ],
                     403,
                 );
@@ -187,10 +216,19 @@ class AuthMiddleware
 
             return $next($request);
         } catch (\Throwable $e) {
+            Log::warning('Authentication failed', [
+                'path' => $request->path(),
+                'ip' => $request->ip(),
+                'error' => $e->getMessage(),
+            ]);
+
             return response()->json(
                 [
+                    'success' => false,
                     'message' => 'Unauthorized',
-                    'error' => $e->getMessage(),
+                    'errors' => [
+                        'auth' => [$e->getMessage()],
+                    ],
                 ],
                 401,
             );

@@ -3,7 +3,10 @@
 namespace App\Providers;
 
 use App\Support\SchemaCompatibilityChecker;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -21,6 +24,18 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('lead-write', function (Request $request) {
+            $tenant = (string) ($request->header('X-Tenant-Id') ?? 'tenant');
+
+            return Limit::perMinute(60)->by($tenant . '|' . $request->ip());
+        });
+
+        RateLimiter::for('bulk-write', function (Request $request) {
+            $tenant = (string) ($request->header('X-Tenant-Id') ?? 'tenant');
+
+            return Limit::perMinute(30)->by($tenant . '|' . $request->ip());
+        });
+
         if (!config('app.schema_compat_check_on_boot', true)) {
             return;
         }

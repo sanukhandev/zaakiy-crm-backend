@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 use App\Support\CacheHelper;
 
 class LeadRepository
@@ -83,6 +84,12 @@ class LeadRepository
         $data['updated_at'] = now();
 
         DB::table('leads')->insert($data);
+
+        Log::info('Lead created', [
+            'lead_id' => $data['id'],
+            'tenant_id' => $data['tenant_id'] ?? null,
+            'status' => $data['status'] ?? null,
+        ]);
 
         $this->bustCache($data['tenant_id']);
 
@@ -254,32 +261,119 @@ class LeadRepository
 
     public function moveLead(string $id, array $auth, array $payload): object
     {
-        $lead = $this->ensureLeadExistsForTenant($id, $auth['tenant_id']);
+        DB::transaction(function () use ($id, $auth, $payload) {
+            $lead = DB::table('leads')
+                ->where('id', $id)
+                ->where('tenant_id', $auth['tenant_id'])
+                ->whereNull('deleted_at')
+                ->lockForUpdate()
+                ->first();
 
-        DB::transaction(function () use ($id, $auth, $payload, $lead) {
-            $updateData = [
-                'position' => (int) $payload['position'],
-                'updated_at' => now(),
-            ];
+            if (!$lead) {
+                throw new \Illuminate\Database\Eloquent\ModelNotFoundException(
+                    'Lead not found',
+                );
+            }
 
-            if ($payload['status'] !== $lead->status) {
-                $updateData['status'] = $payload['status'];
+            $oldStatus = $lead->status;
+            $newStatus = $payload['status'];
+            $oldPosition = (int) ($lead->position ?? 0);
+
+            $targetCount = DB::table('leads')
+                ->where('tenant_id', $auth['tenant_id'])
+                ->where('status', $newStatus)
+                ->whereNull('deleted_at')
+                ->when($newStatus === $oldStatus, function ($q) use ($id) {
+                    $q->where('id', '!=', $id);
+                })
+                ->count();
+
+            $targetPosition = max(0, (int) $payload['position']);
+            $targetPosition = min($targetPosition, (int) $targetCount);
+
+            if ($newStatus === $oldStatus) {
+                if ($targetPosition > $oldPosition) {
+                    DB::table('leads')
+                        ->where('tenant_id', $auth['tenant_id'])
+                        ->where('status', $oldStatus)
+                        ->whereNull('deleted_at')
+                        ->where('id', '!=', $id)
+                        ->whereBetween('position', [$oldPosition + 1, $targetPosition])
+                        ->update([
+                            'position' => DB::raw('position - 1'),
+                            'updated_at' => now(),
+                        ]);
+                } elseif ($targetPosition < $oldPosition) {
+                    DB::table('leads')
+                        ->where('tenant_id', $auth['tenant_id'])
+                        ->where('status', $oldStatus)
+                        ->whereNull('deleted_at')
+                        ->where('id', '!=', $id)
+                        ->whereBetween('position', [$targetPosition, $oldPosition - 1])
+                        ->update([
+                            'position' => DB::raw('position + 1'),
+                            'updated_at' => now(),
+                        ]);
+                }
+
+                DB::table('leads')
+                    ->where('id', $id)
+                    ->where('tenant_id', $auth['tenant_id'])
+                    ->whereNull('deleted_at')
+                    ->update([
+                        'position' => $targetPosition,
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                DB::table('leads')
+                    ->where('tenant_id', $auth['tenant_id'])
+                    ->where('status', $oldStatus)
+                    ->whereNull('deleted_at')
+                    ->where('id', '!=', $id)
+                    ->where('position', '>', $oldPosition)
+                    ->update([
+                        'position' => DB::raw('position - 1'),
+                        'updated_at' => now(),
+                    ]);
+
+                DB::table('leads')
+                    ->where('tenant_id', $auth['tenant_id'])
+                    ->where('status', $newStatus)
+                    ->whereNull('deleted_at')
+                    ->where('position', '>=', $targetPosition)
+                    ->update([
+                        'position' => DB::raw('position + 1'),
+                        'updated_at' => now(),
+                    ]);
 
                 DB::table('lead_status_history')->insert([
                     'id' => (string) Str::uuid(),
                     'lead_id' => $id,
-                    'old_status' => $lead->status,
-                    'new_status' => $payload['status'],
+                    'old_status' => $oldStatus,
+                    'new_status' => $newStatus,
                     'changed_by' => $auth['user_id'],
                     'created_at' => now(),
                 ]);
+
+                DB::table('leads')
+                    ->where('id', $id)
+                    ->where('tenant_id', $auth['tenant_id'])
+                    ->whereNull('deleted_at')
+                    ->update([
+                        'status' => $newStatus,
+                        'position' => $targetPosition,
+                        'updated_at' => now(),
+                    ]);
             }
 
-            DB::table('leads')
-                ->where('id', $id)
-                ->where('tenant_id', $auth['tenant_id'])
-                ->whereNull('deleted_at')
-                ->update($updateData);
+            Log::info('Lead moved in pipeline', [
+                'lead_id' => $id,
+                'tenant_id' => $auth['tenant_id'],
+                'from_status' => $oldStatus,
+                'to_status' => $newStatus,
+                'to_position' => $targetPosition,
+                'moved_by' => $auth['user_id'] ?? null,
+            ]);
         });
 
         $this->bustCache($auth['tenant_id']);
@@ -326,6 +420,11 @@ class LeadRepository
                 'Lead not found',
             );
         }
+
+        Log::info('Lead deleted', [
+            'lead_id' => $id,
+            'tenant_id' => $tenantId,
+        ]);
 
         $this->bustCache($tenantId);
 
@@ -463,6 +562,13 @@ class LeadRepository
 
         $this->bustCache($auth['tenant_id']);
 
+        Log::info('Leads bulk updated', [
+            'tenant_id' => $auth['tenant_id'],
+            'count' => $affected,
+            'lead_ids' => $leadIds,
+            'updated_by' => $auth['user_id'] ?? null,
+        ]);
+
         return $affected;
     }
 
@@ -482,6 +588,14 @@ class LeadRepository
 
         $this->bustCache($auth['tenant_id']);
 
+        Log::info('Leads bulk assigned', [
+            'tenant_id' => $auth['tenant_id'],
+            'count' => $affected,
+            'lead_ids' => $leadIds,
+            'assigned_to' => $assignedTo,
+            'updated_by' => $auth['user_id'] ?? null,
+        ]);
+
         return $affected;
     }
 
@@ -497,6 +611,13 @@ class LeadRepository
             ]);
 
         $this->bustCache($auth['tenant_id']);
+
+        Log::info('Leads bulk deleted', [
+            'tenant_id' => $auth['tenant_id'],
+            'count' => $affected,
+            'lead_ids' => $leadIds,
+            'deleted_by' => $auth['user_id'] ?? null,
+        ]);
 
         return $affected;
     }

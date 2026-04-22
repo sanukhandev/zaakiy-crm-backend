@@ -20,14 +20,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/session', [SessionController::class, 'getSession']);
         Route::get('/pipeline', [PipelineController::class, 'index']);
         Route::get('/leads', [LeadController::class, 'index']);
-        Route::post('/leads', [LeadController::class, 'store']);
+        Route::post('/leads', [LeadController::class, 'store'])->middleware('throttle:lead-write');
 
-        Route::patch('/leads/bulk', [LeadController::class, 'bulkUpdate']);
+        Route::patch('/leads/bulk', [LeadController::class, 'bulkUpdate'])->middleware('throttle:bulk-write');
         Route::post('/leads/bulk/assign', [
             LeadController::class,
             'bulkAssign',
-        ]);
-        Route::delete('/leads/bulk', [LeadController::class, 'bulkDelete']);
+        ])->middleware('throttle:bulk-write');
+        Route::delete('/leads/bulk', [LeadController::class, 'bulkDelete'])->middleware('throttle:bulk-write');
 
         Route::get('/leads/{id}/activities', [
             LeadController::class,
@@ -38,7 +38,7 @@ Route::prefix('v1')->group(function () {
             'storeActivity',
         ]);
 
-        Route::patch('/leads/{id}/move', [LeadController::class, 'move']);
+        Route::patch('/leads/{id}/move', [LeadController::class, 'move'])->middleware('throttle:lead-write');
         Route::patch('/leads/{id}', [LeadController::class, 'update']);
         Route::delete('/leads/{id}', [LeadController::class, 'destroy']);
     });
