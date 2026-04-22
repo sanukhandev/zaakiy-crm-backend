@@ -61,17 +61,21 @@ class AuthMiddleware
                 return response()->json(['message' => 'Invalid token'], 401);
             }
 
+            // Store as array — stdClass is not reliably serializable by the file cache driver.
             $user = Cache::remember(
                 'auth_user_' . $userId,
                 300,
-                fn() => DB::table('users')->where('id', $userId)->first(),
+                function () use ($userId) {
+                    $row = DB::table('users')->where('id', $userId)->first();
+                    return $row ? (array) $row : null;
+                },
             );
 
             if (!$user) {
                 return response()->json(['message' => 'User not found'], 401);
             }
 
-            if (!$user->tenant_id) {
+            if (empty($user['tenant_id'])) {
                 return response()->json(
                     ['message' => 'User not linked to tenant'],
                     403,
@@ -79,9 +83,9 @@ class AuthMiddleware
             }
 
             $request->attributes->set('auth', [
-                'user_id' => $user->id,
-                'tenant_id' => $user->tenant_id,
-                'role' => $user->role,
+                'user_id' => $user['id'],
+                'tenant_id' => $user['tenant_id'],
+                'role' => $user['role'] ?? null,
             ]);
 
             return $next($request);
