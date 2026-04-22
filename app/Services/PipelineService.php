@@ -6,9 +6,7 @@ use App\Repositories\LeadRepository;
 
 class PipelineService
 {
-    public function __construct(protected LeadRepository $leadRepo)
-    {
-    }
+    public function __construct(protected LeadRepository $leadRepo) {}
 
     public function getPipeline(array $auth): array
     {

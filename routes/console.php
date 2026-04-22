@@ -30,4 +30,6 @@ Artisan::command('app:schema-check', function () {
     }
 
     return empty($result['errors']) ? self::SUCCESS : self::FAILURE;
-})->purpose('Validate DB schema compatibility against application requirements');
+})->purpose(
+    'Validate DB schema compatibility against application requirements',
+);

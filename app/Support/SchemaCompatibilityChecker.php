@@ -66,8 +66,15 @@ class SchemaCompatibilityChecker
         $this->checkIndex('leads', 'leads_tenant_email_unique', $warnings);
         $this->checkIndex('leads', 'leads_tenant_phone_unique', $warnings);
 
-        if (Schema::hasTable('leads') && Schema::hasColumn('leads', 'position')) {
-            $this->checkIndex('leads', 'leads_tenant_id_status_position_index', $warnings);
+        if (
+            Schema::hasTable('leads') &&
+            Schema::hasColumn('leads', 'position')
+        ) {
+            $this->checkIndex(
+                'leads',
+                'leads_tenant_id_status_position_index',
+                $warnings,
+            );
         }
 
         $this->checkForeignKey(
@@ -89,8 +96,11 @@ class SchemaCompatibilityChecker
         ];
     }
 
-    private function checkIndex(string $table, string $indexName, array &$warnings): void
-    {
+    private function checkIndex(
+        string $table,
+        string $indexName,
+        array &$warnings,
+    ): void {
         if (!Schema::hasTable($table)) {
             return;
         }
@@ -129,7 +139,9 @@ class SchemaCompatibilityChecker
 
             if ($driver === 'sqlite') {
                 $rows = DB::select("PRAGMA index_list('{$table}')");
-                $exists = collect($rows)->contains(function ($row) use ($indexName) {
+                $exists = collect($rows)->contains(function ($row) use (
+                    $indexName,
+                ) {
                     return ($row->name ?? null) === $indexName;
                 });
 

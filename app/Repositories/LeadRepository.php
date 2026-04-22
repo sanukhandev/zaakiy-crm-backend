@@ -5,6 +5,7 @@ namespace App\Repositories;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
 
 class LeadRepository
 {
@@ -324,18 +325,25 @@ class LeadRepository
     }
 
     public function listActivities(
-        string $leadId,
-        string $tenantId,
-        int $perPage = 20,
-    ) {
-        $this->ensureLeadExistsForTenant($leadId, $tenantId);
+    string $leadId,
+    string $tenantId,
+    int $perPage = 20,
+) {
+    // Ensure lead belongs to tenant
+    $this->ensureLeadExistsForTenant($leadId, $tenantId);
 
-        return DB::table('lead_activities')
-            ->where('lead_id', $leadId)
-            ->where('tenant_id', $tenantId)
-            ->orderByDesc('created_at')
-            ->paginate(min($perPage, 100));
+    $query = DB::table('lead_activities')
+        ->where('lead_id', $leadId);
+
+    // ✅ Apply tenant filter ONLY if column exists
+    if (Schema::hasColumn('lead_activities', 'tenant_id')) {
+        $query->where('tenant_id', $tenantId);
     }
+
+    return $query
+        ->orderByDesc('created_at')
+        ->paginate(min($perPage, 100));
+}
 
     public function bulkUpdate(array $auth, array $leadIds, array $payload): int
     {

@@ -11,9 +11,7 @@ class PipelineController extends Controller
 {
     use ApiResponse;
 
-    public function __construct(protected PipelineService $pipelineService)
-    {
-    }
+    public function __construct(protected PipelineService $pipelineService) {}
 
     private function resolveAuth(Request $request): ?array
     {
