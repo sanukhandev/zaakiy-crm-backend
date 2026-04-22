@@ -10,9 +10,88 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
+use Firebase\JWT\Key;
 
 class AuthMiddleware
 {
+    private static ?bool $usersTableExists = null;
+    private static ?bool $usersHasSupabaseUserIdColumn = null;
+
+    private function usersTableExists(): bool
+    {
+        if (self::$usersTableExists === null) {
+            self::$usersTableExists = Schema::hasTable('users');
+        }
+
+        return self::$usersTableExists;
+    }
+
+    private function usersHasSupabaseUserIdColumn(): bool
+    {
+        if (self::$usersHasSupabaseUserIdColumn === null) {
+            self::$usersHasSupabaseUserIdColumn = Schema::hasColumn(
+                'users',
+                'supabase_user_id',
+            );
+        }
+
+        return self::$usersHasSupabaseUserIdColumn;
+    }
+
+    private function jwtAlg(string $token): ?string
+    {
+        $parts = explode('.', $token);
+
+        if (count($parts) < 2) {
+            return null;
+        }
+
+        $header = json_decode(base64_decode(strtr($parts[0], '-_', '+/')), true);
+
+        return is_array($header) ? ($header['alg'] ?? null) : null;
+    }
+
+    private function decodeToken(string $token): object
+    {
+        $jwtSecret = config('services.supabase.jwt_secret');
+        $alg = $this->jwtAlg($token);
+
+        if (!empty($jwtSecret) && $alg === 'HS256') {
+            return JWT::decode($token, new Key($jwtSecret, 'HS256'));
+        }
+
+        $jwks = Cache::remember('supabase_jwks', 21600, function () {
+            $http = Http::timeout(5)->withHeaders([
+                'apikey' => config('services.supabase.api_key'),
+                'Accept' => 'application/json',
+            ]);
+
+            if (!app()->environment('production')) {
+                $http = $http->withoutVerifying();
+            }
+
+            $response = $http->get(
+                config('services.supabase.url') . '/auth/v1/.well-known/jwks.json',
+            );
+
+            if (!$response->successful()) {
+                throw new \Exception('Failed to fetch JWKS: ' . $response->body());
+            }
+
+            $json = $response->json();
+
+            if (!isset($json['keys'])) {
+                throw new \Exception('Invalid JWKS response: ' . json_encode($json));
+            }
+
+            return $json;
+        });
+
+        $keys = JWK::parseKeySet($jwks);
+
+        return JWT::decode($token, $keys);
+    }
+
     public function handle(Request $request, Closure $next)
     {
         try {
@@ -22,40 +101,7 @@ class AuthMiddleware
                 return response()->json(['message' => 'No token'], 401);
             }
 
-            $jwks = Cache::remember('supabase_jwks', 3600, function () {
-                $http = Http::timeout(10)->withHeaders([
-                    'apikey' => config('services.supabase.api_key'),
-                    'Accept' => 'application/json',
-                ]);
-
-                if (!app()->environment('production')) {
-                    $http = $http->withoutVerifying();
-                }
-
-                $response = $http->get(
-                    config('services.supabase.url') .
-                        '/auth/v1/.well-known/jwks.json',
-                );
-
-                if (!$response->successful()) {
-                    throw new \Exception(
-                        'Failed to fetch JWKS: ' . $response->body(),
-                    );
-                }
-
-                $json = $response->json();
-
-                if (!isset($json['keys'])) {
-                    throw new \Exception(
-                        'Invalid JWKS response: ' . json_encode($json),
-                    );
-                }
-
-                return $json;
-            });
-
-            $keys = JWK::parseKeySet($jwks);
-            $decoded = JWT::decode($token, $keys);
+            $decoded = $this->decodeToken($token);
 
             $supabaseUserId = $decoded->sub ?? null;
             $jwtEmail = $decoded->email ?? null;
@@ -69,13 +115,13 @@ class AuthMiddleware
                 300,
                 function () use ($supabaseUserId, $jwtEmail) {
                     try {
-                        if (!Schema::hasTable('users')) {
+                        if (!$this->usersTableExists()) {
                             return null;
                         }
 
                         $user = null;
 
-                        if (Schema::hasColumn('users', 'supabase_user_id')) {
+                        if ($this->usersHasSupabaseUserIdColumn()) {
                             $user = DB::table('users')
                                 ->where('supabase_user_id', $supabaseUserId)
                                 ->first();

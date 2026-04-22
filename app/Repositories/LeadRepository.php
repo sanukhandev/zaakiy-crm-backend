@@ -6,29 +6,74 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
+use App\Support\CacheHelper;
 
 class LeadRepository
 {
-    private function cacheKey(string $tenantId): string
+    private function tenantVersionKey(string $tenantId): string
     {
-        return 'leads_' . $tenantId;
+        return 'leads_ver_' . $tenantId;
+    }
+
+    private function currentVersion(string $tenantId): int
+    {
+        if (!CacheHelper::isEnabled()) {
+            return 1;
+        }
+
+        return (int) Cache::get($this->tenantVersionKey($tenantId), 1);
+    }
+
+    private function bumpVersion(string $tenantId): void
+    {
+        if (!CacheHelper::isEnabled()) {
+            return;
+        }
+
+        $versionKey = $this->tenantVersionKey($tenantId);
+
+        if (!Cache::has($versionKey)) {
+            Cache::forever($versionKey, 1);
+        }
+
+        Cache::increment($versionKey);
+    }
+
+    private function paginatedCacheKey(string $tenantId, array $filters): string
+    {
+        $version = $this->currentVersion($tenantId);
+
+        ksort($filters);
+
+        return 'leads:list:' . $tenantId . ':v' . $version . ':' . md5(json_encode($filters));
+    }
+
+    private function pipelineCacheKey(string $tenantId): string
+    {
+        $version = $this->currentVersion($tenantId);
+
+        return 'leads:pipeline:' . $tenantId . ':v' . $version;
     }
 
     private function bustCache(string $tenantId): void
     {
+        if (!CacheHelper::isEnabled()) {
+            return;
+        }
+
+        $this->bumpVersion($tenantId);
+
         $store = Cache::getStore();
 
         if (method_exists($store, 'tags')) {
             try {
                 Cache::tags(['leads', $tenantId])->flush();
-
                 return;
             } catch (\Throwable) {
                 // Fallback to key-based invalidation for non-taggable stores.
             }
         }
 
-        Cache::forget($this->cacheKey($tenantId));
     }
 
     public function create(array $data): string
@@ -46,71 +91,75 @@ class LeadRepository
 
     public function getPaginated(string $tenantId, array $filters = [])
     {
-        $perPage = min((int) ($filters['per_page'] ?? 10), 100);
+        $cacheKey = $this->paginatedCacheKey($tenantId, $filters);
 
-        $query = DB::table('leads')
-            ->where('tenant_id', $tenantId)
-            ->whereNull('deleted_at');
+        return CacheHelper::remember($cacheKey, function () use ($tenantId, $filters) {
+            $perPage = min((int) ($filters['per_page'] ?? 10), 100);
 
-        // Filter: status
-        if (!empty($filters['status'])) {
-            $query->where('status', $filters['status']);
-        }
+            $query = DB::table('leads')
+                ->where('tenant_id', $tenantId)
+                ->whereNull('deleted_at');
 
-        // Filter: source
-        if (!empty($filters['source'])) {
-            $query->where('source', $filters['source']);
-        }
-        if (!empty($filters['assigned_to'])) {
-            $query->where('assigned_to', $filters['assigned_to']);
-        }
+            if (!empty($filters['status'])) {
+                $query->where('status', $filters['status']);
+            }
 
-        // Search
-        if (!empty($filters['search'])) {
-            $search = $filters['search'];
+            if (!empty($filters['source'])) {
+                $query->where('source', $filters['source']);
+            }
 
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'ilike', "%$search%")
-                    ->orWhere('email', 'ilike', "%$search%")
-                    ->orWhere('phone', 'ilike', "%$search%");
-            });
-        }
+            if (!empty($filters['assigned_to'])) {
+                $query->where('assigned_to', $filters['assigned_to']);
+            }
 
-        // Sorting
-        $allowedSorts = ['created_at', 'name', 'status'];
+            if (!empty($filters['search'])) {
+                $search = $filters['search'];
 
-        $sortBy = in_array($filters['sort_by'] ?? '', $allowedSorts)
-            ? $filters['sort_by']
-            : 'created_at';
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'ilike', "%$search%")
+                        ->orWhere('email', 'ilike', "%$search%")
+                        ->orWhere('phone', 'ilike', "%$search%");
+                });
+            }
 
-        $sortOrder =
-            ($filters['sort_order'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
+            $allowedSorts = ['created_at', 'name', 'status'];
 
-        $query->orderBy($sortBy, $sortOrder);
+            $sortBy = in_array($filters['sort_by'] ?? '', $allowedSorts)
+                ? $filters['sort_by']
+                : 'created_at';
 
-        // Pagination
-        return $query->paginate($perPage);
+            $sortOrder =
+                ($filters['sort_order'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
+
+            $query->orderBy($sortBy, $sortOrder);
+
+            return $query->paginate($perPage);
+        });
     }
 
     public function getPipeline(string $tenantId): array
     {
-        $stages = ['new', 'contacted', 'qualified', 'won', 'lost'];
-        $grouped = array_fill_keys($stages, []);
+        $cacheKey = $this->pipelineCacheKey($tenantId);
 
-        $leads = DB::table('leads')
-            ->where('tenant_id', $tenantId)
-            ->whereNull('deleted_at')
-            ->orderBy('status')
-            ->orderBy('position')
-            ->get();
+        return CacheHelper::remember($cacheKey, function () use ($tenantId) {
+            $stages = ['new', 'contacted', 'qualified', 'won', 'lost'];
+            $grouped = array_fill_keys($stages, []);
 
-        foreach ($leads as $lead) {
-            if (array_key_exists($lead->status, $grouped)) {
-                $grouped[$lead->status][] = $lead;
+            $leads = DB::table('leads')
+                ->where('tenant_id', $tenantId)
+                ->whereNull('deleted_at')
+                ->orderBy('status')
+                ->orderBy('position')
+                ->get();
+
+            foreach ($leads as $lead) {
+                if (array_key_exists($lead->status, $grouped)) {
+                    $grouped[$lead->status][] = $lead;
+                }
             }
-        }
 
-        return $grouped;
+            return $grouped;
+        });
     }
 
     public function update(string $id, array $auth, array $payload): object

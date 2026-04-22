@@ -120,4 +120,17 @@ return [
     */
 
     'serializable_classes' => false,
+
+    /*
+    |--------------------------------------------------------------------------
+    | API Cache Settings
+    |--------------------------------------------------------------------------
+    |
+    | Control whether API responses are cached and the TTL in seconds.
+    | Set API_CACHE_ENABLED=false to disable caching for debugging.
+    |
+    */
+
+    'api_enabled' => env('API_CACHE_ENABLED', true),
+    'api_ttl' => (int) env('API_CACHE_TTL', 300), // 5 minutes default
 ];
