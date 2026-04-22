@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Firebase\JWT\JWT;
@@ -23,7 +22,7 @@ class AuthMiddleware
 
             $jwks = Cache::remember('supabase_jwks', 3600, function () {
                 $http = Http::timeout(10)->withHeaders([
-                    'apikey' => env('SUPABASE_ANON_KEY'),
+                    'apikey' => config('services.supabase.api_key'),
                     'Accept' => 'application/json',
                 ]);
 
@@ -32,7 +31,8 @@ class AuthMiddleware
                 }
 
                 $response = $http->get(
-                    env('SUPABASE_URL') . '/auth/v1/.well-known/jwks.json',
+                    config('services.supabase.url') .
+                        '/auth/v1/.well-known/jwks.json',
                 );
 
                 if (!$response->successful()) {
@@ -55,37 +55,28 @@ class AuthMiddleware
             $keys = JWK::parseKeySet($jwks);
             $decoded = JWT::decode($token, $keys);
 
-            $userId = $decoded->sub ?? null;
+            $supabaseUserId = $decoded->sub ?? null;
+            $tenantId =
+                $decoded->tenant_id ??
+                ($decoded->app_metadata->tenant_id ??
+                    $request->header('X-Tenant-Id'));
 
-            if (!$userId) {
+            if (!$supabaseUserId) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
 
-            // Store as array — stdClass is not reliably serializable by the file cache driver.
-            $user = Cache::remember(
-                'auth_user_' . $userId,
-                300,
-                function () use ($userId) {
-                    $row = DB::table('users')->where('id', $userId)->first();
-                    return $row ? (array) $row : null;
-                },
-            );
-
-            if (!$user) {
-                return response()->json(['message' => 'User not found'], 401);
-            }
-
-            if (empty($user['tenant_id'])) {
+            if (empty($tenantId)) {
                 return response()->json(
-                    ['message' => 'User not linked to tenant'],
+                    ['message' => 'Tenant missing in token claims'],
                     403,
                 );
             }
 
             $request->attributes->set('auth', [
-                'user_id' => $user['id'],
-                'tenant_id' => $user['tenant_id'],
-                'role' => $user['role'] ?? null,
+                'user_id' => $supabaseUserId,
+                'tenant_id' => $tenantId,
+                'role' => $decoded->role ?? null,
+                'email' => $decoded->email ?? null,
             ]);
 
             return $next($request);

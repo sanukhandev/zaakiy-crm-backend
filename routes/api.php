@@ -19,6 +19,23 @@ Route::prefix('v1')->group(function () {
         Route::get('/session', [SessionController::class, 'getSession']);
         Route::get('/leads', [LeadController::class, 'index']);
         Route::post('/leads', [LeadController::class, 'store']);
+
+        Route::patch('/leads/bulk', [LeadController::class, 'bulkUpdate']);
+        Route::post('/leads/bulk/assign', [
+            LeadController::class,
+            'bulkAssign',
+        ]);
+        Route::delete('/leads/bulk', [LeadController::class, 'bulkDelete']);
+
+        Route::get('/leads/{id}/activities', [
+            LeadController::class,
+            'listActivities',
+        ]);
+        Route::post('/leads/{id}/activities', [
+            LeadController::class,
+            'storeActivity',
+        ]);
+
         Route::patch('/leads/{id}', [LeadController::class, 'update']);
         Route::delete('/leads/{id}', [LeadController::class, 'destroy']);
     });

@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class LeadRepository
 {
@@ -17,16 +18,17 @@ class LeadRepository
         Cache::forget($this->cacheKey($tenantId));
     }
 
-    public function create(array $data): int
+    public function create(array $data): string
     {
+        $data['id'] = $data['id'] ?? (string) Str::uuid();
         $data['created_at'] = now();
         $data['updated_at'] = now();
 
-        $id = DB::table('leads')->insertGetId($data);
+        DB::table('leads')->insert($data);
 
         $this->bustCache($data['tenant_id']);
 
-        return $id;
+        return $data['id'];
     }
 
     public function getPaginated(string $tenantId, array $filters = [])
@@ -77,7 +79,7 @@ class LeadRepository
         return $query->paginate($perPage);
     }
 
-    public function update(int $id, array $auth, array $payload): object
+    public function update(string $id, array $auth, array $payload): object
     {
         // 1. Fetch existing lead (excludes soft-deleted)
         $lead = DB::table('leads')
@@ -187,7 +189,7 @@ class LeadRepository
             })
             ->first();
     }
-    public function delete(int $id, string $tenantId): bool
+    public function delete(string $id, string $tenantId): bool
     {
         $affected = DB::table('leads')
             ->where('id', $id)
@@ -204,5 +206,166 @@ class LeadRepository
         $this->bustCache($tenantId);
 
         return true;
+    }
+
+    public function ensureLeadExistsForTenant(
+        string $id,
+        string $tenantId,
+    ): object {
+        $lead = DB::table('leads')
+            ->where('id', $id)
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$lead) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException(
+                'Lead not found',
+            );
+        }
+
+        return $lead;
+    }
+
+    public function addActivity(
+        string $leadId,
+        array $auth,
+        array $payload,
+    ): string {
+        $this->ensureLeadExistsForTenant($leadId, $auth['tenant_id']);
+
+        $id = (string) Str::uuid();
+
+        DB::table('lead_activities')->insert([
+            'id' => $id,
+            'lead_id' => $leadId,
+            'tenant_id' => $auth['tenant_id'],
+            'type' => $payload['type'],
+            'content' => $payload['content'],
+            'created_by' => $auth['user_id'],
+            'created_at' => now(),
+        ]);
+
+        return $id;
+    }
+
+    public function listActivities(
+        string $leadId,
+        string $tenantId,
+        int $perPage = 20,
+    ) {
+        $this->ensureLeadExistsForTenant($leadId, $tenantId);
+
+        return DB::table('lead_activities')
+            ->where('lead_id', $leadId)
+            ->where('tenant_id', $tenantId)
+            ->orderByDesc('created_at')
+            ->paginate(min($perPage, 100));
+    }
+
+    public function bulkUpdate(array $auth, array $leadIds, array $payload): int
+    {
+        $affected = 0;
+
+        DB::transaction(function () use (
+            &$affected,
+            $auth,
+            $leadIds,
+            $payload,
+        ) {
+            $updateData = [];
+
+            foreach (['status', 'source', 'assigned_to'] as $field) {
+                if (array_key_exists($field, $payload)) {
+                    $updateData[$field] = $payload[$field];
+                }
+            }
+
+            if (array_key_exists('metadata', $payload)) {
+                $updateData['metadata'] = json_encode($payload['metadata']);
+            }
+
+            $updateData['updated_at'] = now();
+
+            if (
+                isset($payload['status']) &&
+                in_array($payload['status'], [
+                    'new',
+                    'contacted',
+                    'qualified',
+                    'won',
+                    'lost',
+                ])
+            ) {
+                $existing = DB::table('leads')
+                    ->where('tenant_id', $auth['tenant_id'])
+                    ->whereIn('id', $leadIds)
+                    ->whereNull('deleted_at')
+                    ->where('status', '!=', $payload['status'])
+                    ->select(['id', 'status'])
+                    ->get();
+
+                $historyRows = $existing
+                    ->map(function ($row) use ($auth, $payload) {
+                        return [
+                            'lead_id' => $row->id,
+                            'old_status' => $row->status,
+                            'new_status' => $payload['status'],
+                            'changed_by' => $auth['user_id'],
+                            'created_at' => now(),
+                        ];
+                    })
+                    ->all();
+
+                if (!empty($historyRows)) {
+                    DB::table('lead_status_history')->insert($historyRows);
+                }
+            }
+
+            $affected = DB::table('leads')
+                ->where('tenant_id', $auth['tenant_id'])
+                ->whereIn('id', $leadIds)
+                ->whereNull('deleted_at')
+                ->update($updateData);
+        });
+
+        $this->bustCache($auth['tenant_id']);
+
+        return $affected;
+    }
+
+    public function bulkAssign(
+        array $auth,
+        array $leadIds,
+        string $assignedTo,
+    ): int {
+        $affected = DB::table('leads')
+            ->where('tenant_id', $auth['tenant_id'])
+            ->whereIn('id', $leadIds)
+            ->whereNull('deleted_at')
+            ->update([
+                'assigned_to' => $assignedTo,
+                'updated_at' => now(),
+            ]);
+
+        $this->bustCache($auth['tenant_id']);
+
+        return $affected;
+    }
+
+    public function bulkDelete(array $auth, array $leadIds): int
+    {
+        $affected = DB::table('leads')
+            ->where('tenant_id', $auth['tenant_id'])
+            ->whereIn('id', $leadIds)
+            ->whereNull('deleted_at')
+            ->update([
+                'deleted_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+        $this->bustCache($auth['tenant_id']);
+
+        return $affected;
     }
 }

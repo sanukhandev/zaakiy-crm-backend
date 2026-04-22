@@ -46,13 +46,60 @@ class LeadService
         return $this->leadRepo->getPaginated($auth['tenant_id'], $params);
     }
 
-    public function updateLead(array $auth, int $id, array $payload)
+    public function updateLead(array $auth, string $id, array $payload)
     {
         return $this->leadRepo->update($id, $auth, $payload);
     }
 
-    public function deleteLead(array $auth, int $id): bool
+    public function deleteLead(array $auth, string $id): bool
     {
         return $this->leadRepo->delete($id, $auth['tenant_id']);
+    }
+
+    public function addLeadActivity(
+        array $auth,
+        string $leadId,
+        array $payload,
+    ): array {
+        $id = $this->leadRepo->addActivity($leadId, $auth, $payload);
+
+        return ['id' => $id];
+    }
+
+    public function listLeadActivities(
+        array $auth,
+        string $leadId,
+        array $params,
+    ) {
+        $perPage = (int) ($params['per_page'] ?? 20);
+
+        return $this->leadRepo->listActivities(
+            $leadId,
+            $auth['tenant_id'],
+            $perPage,
+        );
+    }
+
+    public function bulkUpdateLeads(array $auth, array $payload): int
+    {
+        return $this->leadRepo->bulkUpdate(
+            $auth,
+            $payload['lead_ids'],
+            $payload,
+        );
+    }
+
+    public function bulkAssignLeads(array $auth, array $payload): int
+    {
+        return $this->leadRepo->bulkAssign(
+            $auth,
+            $payload['lead_ids'],
+            $payload['assigned_to'],
+        );
+    }
+
+    public function bulkDeleteLeads(array $auth, array $payload): int
+    {
+        return $this->leadRepo->bulkDelete($auth, $payload['lead_ids']);
     }
 }

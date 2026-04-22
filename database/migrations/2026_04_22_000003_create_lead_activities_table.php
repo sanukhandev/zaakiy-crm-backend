@@ -7,12 +7,13 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('lead_status_history', function (Blueprint $table) {
-            $table->id();
+        Schema::create('lead_activities', function (Blueprint $table) {
+            $table->uuid('id')->primary();
             $table->uuid('lead_id');
-            $table->string('old_status', 20)->nullable();
-            $table->string('new_status', 20);
-            $table->uuid('changed_by')->nullable();
+            $table->uuid('tenant_id')->index();
+            $table->string('type', 30);
+            $table->text('content');
+            $table->uuid('created_by')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
             $table
@@ -21,11 +22,12 @@ return new class extends Migration {
                 ->on('leads')
                 ->cascadeOnDelete();
             $table->index(['lead_id', 'created_at']);
+            $table->index(['tenant_id', 'created_at']);
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('lead_status_history');
+        Schema::dropIfExists('lead_activities');
     }
 };
