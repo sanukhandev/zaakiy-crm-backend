@@ -23,4 +23,3 @@ Route::prefix('v1')->group(function () {
         Route::delete('/leads/{id}', [LeadController::class, 'destroy']);
     });
 });
-

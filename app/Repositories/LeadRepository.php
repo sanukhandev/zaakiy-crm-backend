@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class LeadRepository
 {
@@ -23,6 +24,9 @@ class LeadRepository
         // Filter: source
         if (!empty($filters['source'])) {
             $query->where('source', $filters['source']);
+        }
+        if (!empty($filters['assigned_to'])) {
+            $query->where('assigned_to', $filters['assigned_to']);
         }
 
         // Search
@@ -54,10 +58,76 @@ class LeadRepository
 
     public function update($id, $auth, $payload)
     {
+        // 1. Fetch existing lead
+        $lead = DB::table('leads')
+            ->where('id', $id)
+            ->where('tenant_id', $auth['tenant_id'])
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$lead) {
+            throw new \Exception('Lead not found');
+        }
+
+        // 2. Prepare update data (whitelist fields)
+        $updateData = [];
+
+        if (isset($payload['name'])) {
+            $updateData['name'] = $payload['name'];
+        }
+
+        if (isset($payload['phone'])) {
+            $updateData['phone'] = $payload['phone'];
+        }
+
+        if (isset($payload['email'])) {
+            $updateData['email'] = $payload['email'];
+        }
+
+        if (isset($payload['source'])) {
+            $updateData['source'] = $payload['source'];
+        }
+
+        if (isset($payload['assigned_to'])) {
+            $updateData['assigned_to'] = $payload['assigned_to'];
+        }
+
+        // 3. Handle metadata safely
+        if (isset($payload['metadata'])) {
+            $updateData['metadata'] = json_encode($payload['metadata']);
+        }
+
+        // 4. Handle status change (with history)
+        if (isset($payload['status']) && $payload['status'] !== $lead->status) {
+            // Insert status history
+            DB::table('lead_status_history')->insert([
+                'lead_id' => $id,
+                'old_status' => $lead->status,
+                'new_status' => $payload['status'],
+                'changed_by' => $auth['user_id'],
+                'created_at' => now(),
+            ]);
+
+            $updateData['status'] = $payload['status'];
+        }
+
+        // 5. Add updated timestamp
+        $updateData['updated_at'] = now();
+
+        // 6. Perform update
+        DB::table('leads')
+            ->where('id', $id)
+            ->where('tenant_id', $auth['tenant_id'])
+            ->update($updateData);
+
+        // 7. Cache invalidation (important)
+        Cache::flush(); // simple for now (later optimize with tags)
+
+        // 8. Return updated lead
         return DB::table('leads')
             ->where('id', $id)
             ->where('tenant_id', $auth['tenant_id'])
-            ->update($payload);
+            ->first();
     }
     public function findDuplicate($tenantId, $data)
     {

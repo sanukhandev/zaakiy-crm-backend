@@ -42,6 +42,7 @@ class LeadService
             'email' => $payload['email'] ?? null,
             'source' => $payload['source'] ?? null,
             'status' => $payload['status'] ?? 'new',
+            'assigned_to' => $payload['assigned_to'] ?? $auth['user_id'],
             'metadata' => json_encode($payload['metadata'] ?? []),
         ]);
 
