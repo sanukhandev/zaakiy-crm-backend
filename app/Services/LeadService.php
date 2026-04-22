@@ -8,9 +8,9 @@ class LeadService
 {
     protected $leadRepo;
 
-    public function __construct()
+   public function __construct(LeadRepository $leadRepo)
     {
-        // Lazy-load to avoid issues during route listing
+        $this->leadRepo = $leadRepo;
     }
 
     private function getRepo()

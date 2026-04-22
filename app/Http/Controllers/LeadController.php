@@ -16,9 +16,6 @@ class LeadController extends Controller
 
     private function getService()
     {
-        if (!$this->leadService) {
-            $this->leadService = new LeadService();
-        }
         return $this->leadService;
     }
 
