@@ -1,7 +1,6 @@
 <?php
 
 return [
-
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
@@ -39,5 +38,4 @@ return [
         'url' => env('SUPABASE_URL'),
         'jwt_secret' => env('SUPABASE_JWT_SECRET'),
     ],
-
 ];

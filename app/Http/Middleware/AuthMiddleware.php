@@ -21,13 +21,34 @@ class AuthMiddleware
                 return response()->json(['message' => 'No token'], 401);
             }
 
-            // ✅ Cache JWKS for performance
             $jwks = Cache::remember('supabase_jwks', 3600, function () {
-                return Http::get(env('SUPABASE_URL') . '/auth/v1/keys')->json();
+                $response = Http::withoutVerifying()
+                    ->withHeaders([
+                        'apikey' => env('SUPABASE_ANON_KEY'),
+                        'Accept' => 'application/json',
+                    ])
+                    ->get(
+                        env('SUPABASE_URL') . '/auth/v1/.well-known/jwks.json',
+                    );
+
+                if (!$response->successful()) {
+                    throw new \Exception(
+                        'Failed to fetch JWKS: ' . $response->body(),
+                    );
+                }
+
+                $json = $response->json();
+
+                if (!isset($json['keys'])) {
+                    throw new \Exception(
+                        'Invalid JWKS response: ' . json_encode($json),
+                    );
+                }
+
+                return $json;
             });
 
             $keys = JWK::parseKeySet($jwks);
-
             $decoded = JWT::decode($token, $keys);
 
             $userId = $decoded->sub ?? null;
@@ -36,35 +57,34 @@ class AuthMiddleware
                 return response()->json(['message' => 'Invalid token'], 401);
             }
 
-            $user = DB::table('users')
-                ->where('id', $userId)
-                ->first();
+            $user = DB::table('users')->where('id', $userId)->first();
 
             if (!$user) {
                 return response()->json(['message' => 'User not found'], 401);
             }
 
-            // ✅ Critical validation
             if (!$user->tenant_id) {
-                return response()->json([
-                    'message' => 'User not linked to tenant'
-                ], 403);
+                return response()->json(
+                    ['message' => 'User not linked to tenant'],
+                    403,
+                );
             }
 
-            // ✅ Attach auth context
             $request->attributes->set('auth', [
                 'user_id' => $user->id,
                 'tenant_id' => $user->tenant_id,
-                'role' => $user->role
+                'role' => $user->role,
             ]);
 
             return $next($request);
-
         } catch (\Throwable $e) {
-            return response()->json([
-                'message' => 'Unauthorized',
-                'error' => $e->getMessage()
-            ], 401);
+            return response()->json(
+                [
+                    'message' => 'Unauthorized',
+                    'error' => $e->getMessage(),
+                ],
+                401,
+            );
         }
     }
 }

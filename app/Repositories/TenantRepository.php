@@ -8,8 +8,6 @@ class TenantRepository
 {
     public function findById($tenantId)
     {
-        return DB::table('tenants')
-            ->where('id', $tenantId)
-            ->first();
+        return DB::table('tenants')->where('id', $tenantId)->first();
     }
 }

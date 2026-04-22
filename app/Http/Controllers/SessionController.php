@@ -12,7 +12,7 @@ class SessionController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $auth
+            'data' => $auth,
         ]);
     }
 }

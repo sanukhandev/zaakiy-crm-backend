@@ -30,7 +30,7 @@ class LeadService
             'email' => $payload['email'] ?? null,
             'source' => $payload['source'] ?? 'website',
             'status' => 'new',
-            'metadata' => json_encode($payload['metadata'] ?? [])
+            'metadata' => json_encode($payload['metadata'] ?? []),
         ]);
     }
 
@@ -41,10 +41,6 @@ class LeadService
 
     public function updateLead($auth, $id, $payload)
     {
-        return $this->getRepo()->update(
-            $id,
-            $auth['tenant_id'],
-            $payload
-        );
+        return $this->getRepo()->update($id, $auth['tenant_id'], $payload);
     }
 }

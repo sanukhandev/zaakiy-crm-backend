@@ -28,7 +28,7 @@ class LeadController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $this->getService()->listLeads($auth)
+            'data' => $this->getService()->listLeads($auth),
         ]);
     }
 
@@ -40,7 +40,7 @@ class LeadController extends Controller
 
         return response()->json([
             'success' => true,
-            'id' => $id
+            'id' => $id,
         ]);
     }
 
@@ -51,7 +51,7 @@ class LeadController extends Controller
         $this->getService()->updateLead($auth, $id, $request->all());
 
         return response()->json([
-            'success' => true
+            'success' => true,
         ]);
     }
 }
