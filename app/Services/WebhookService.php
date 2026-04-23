@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Services\Webhooks\Normalizers\MetaNormalizer;
 use App\Services\Webhooks\Normalizers\WhatsAppNormalizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class WebhookService
@@ -54,6 +55,25 @@ class WebhookService
     private function resolveTenantId(Request $request, array $payload): ?string
     {
         $apiKey = $request->header('X-Webhook-Key');
+
+        if (!empty($apiKey)) {
+            $row = DB::table('tenant_webhook_keys')
+                ->where('key_hash', hash('sha256', (string) $apiKey))
+                ->whereNull('revoked_at')
+                ->latest('id')
+                ->first();
+
+            if ($row && !empty($row->tenant_id)) {
+                DB::table('tenant_webhook_keys')
+                    ->where('id', $row->id)
+                    ->update([
+                        'last_used_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                return (string) $row->tenant_id;
+            }
+        }
 
         $apiKeyMap = array_filter(
             config('services.webhooks.api_key_map', []),

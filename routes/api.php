@@ -6,6 +6,7 @@ use App\Http\Controllers\LeadController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\PipelineController;
 use App\Http\Controllers\WebhookController;
+use App\Http\Controllers\WebhookKeyController;
 use Illuminate\Support\Facades\DB;
 
 Route::prefix('v1')->group(function () {
@@ -26,6 +27,9 @@ Route::prefix('v1')->group(function () {
             ]);
         });
         Route::get('/session', [SessionController::class, 'getSession']);
+        Route::get('/webhooks/whatsapp/key', [WebhookKeyController::class, 'showWhatsAppKey']);
+        Route::post('/webhooks/whatsapp/key/regenerate', [WebhookKeyController::class, 'regenerateWhatsAppKey'])
+            ->middleware('throttle:bulk-write');
 
         Route::get('/users', function (\Illuminate\Http\Request $request) {
             $auth = $request->attributes->get('auth');
