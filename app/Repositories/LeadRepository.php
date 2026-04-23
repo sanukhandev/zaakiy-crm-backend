@@ -99,10 +99,10 @@ class LeadRepository
     public function getPaginated(string $tenantId, array $filters = [])
     {
         $cacheKey = $this->paginatedCacheKey($tenantId, $filters);
+        $perPage = min((int) ($filters['per_page'] ?? 10), 100);
+        $page = max((int) ($filters['page'] ?? 1), 1);
 
-        return CacheHelper::remember($cacheKey, function () use ($tenantId, $filters) {
-            $perPage = min((int) ($filters['per_page'] ?? 10), 100);
-
+        $cached = CacheHelper::remember($cacheKey, function () use ($tenantId, $filters, $perPage, $page) {
             $query = DB::table('leads')
                 ->where('tenant_id', $tenantId)
                 ->whereNull('deleted_at');
@@ -144,8 +144,19 @@ class LeadRepository
 
             $query->orderBy($sortBy, $sortOrder);
 
-            return $query->paginate($perPage);
+            $total = (clone $query)->count();
+            $items = $query->skip(($page - 1) * $perPage)->take($perPage)->get()->toArray();
+
+            return ['total' => $total, 'items' => $items, 'per_page' => $perPage, 'page' => $page];
         });
+
+        return new \Illuminate\Pagination\LengthAwarePaginator(
+            $cached['items'],
+            $cached['total'],
+            $cached['per_page'],
+            $cached['page'],
+            ['path' => \Illuminate\Pagination\Paginator::resolveCurrentPath()],
+        );
     }
 
     public function getPipeline(string $tenantId): array
