@@ -21,6 +21,7 @@ class SchemaCompatibilityChecker
                 'email',
                 'source',
                 'status',
+                'score',
                 'position',
                 'assigned_to',
                 'metadata',
@@ -45,8 +46,19 @@ class SchemaCompatibilityChecker
                 'created_by',
                 'created_at',
             ],
-            'users' => ['id', 'tenant_id', 'email'],
             'tenants' => ['id'],
+            'pipeline_stages' => ['id', 'tenant_id', 'name', 'order_index'],
+            'messages' => [
+                'id',
+                'tenant_id',
+                'lead_id',
+                'channel',
+                'sender',
+                'content',
+                'direction',
+                'external_id',
+                'created_at',
+            ],
         ];
 
         foreach ($requiredTables as $table => $columns) {

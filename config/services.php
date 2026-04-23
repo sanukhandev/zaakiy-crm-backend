@@ -40,4 +40,13 @@ return [
         'api_key' => env('SUPABASE_ANON_KEY', env('SUPABASE_SERVICE_ROLE_KEY')),
         'default_tenant_id' => env('SUPABASE_DEFAULT_TENANT_ID'),
     ],
+
+    'webhooks' => [
+        'default_tenant_id' => env('WEBHOOK_DEFAULT_TENANT_ID'),
+        'api_key_map' => [
+            env('WEBHOOK_META_API_KEY', '') => env('WEBHOOK_META_TENANT_ID', ''),
+            env('WEBHOOK_WHATSAPP_API_KEY', '') => env('WEBHOOK_WHATSAPP_TENANT_ID', ''),
+        ],
+        'source_map' => [],
+    ],
 ];
