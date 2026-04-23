@@ -84,62 +84,61 @@ class PipelineRepository
     {
         $this->ensureDefaultStages($tenantId);
 
-        return CacheHelper::remember($this->cacheKey($tenantId), function () use ($tenantId) {
-            $stages = DB::table('pipeline_stages')
-                ->where('tenant_id', $tenantId)
-                ->orderBy('order_index')
-                ->get();
+        // Get stages (cacheable)
+        $stages = DB::table('pipeline_stages')
+            ->where('tenant_id', $tenantId)
+            ->orderBy('order_index')
+            ->get();
 
-            $leadRows = DB::table('leads')
-                ->where('tenant_id', $tenantId)
-                ->whereNull('deleted_at')
-                ->orderBy('position')
-                ->get();
+        // Always fetch fresh leads to avoid incomplete object caching issues
+        $leadRows = DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->orderBy('position')
+            ->get();
 
-            $stageNameToId = [];
-            foreach ($stages as $stage) {
-                $stageNameToId[$this->normalizeToken($stage->name)] = $stage->id;
-            }
+        $stageNameToId = [];
+        foreach ($stages as $stage) {
+            $stageNameToId[$this->normalizeToken($stage->name)] = $stage->id;
+        }
 
-            $groupedLeads = [];
-            foreach ($leadRows as $lead) {
-                $targetStageId = $lead->stage_id;
+        $groupedLeads = [];
+        foreach ($leadRows as $lead) {
+            $targetStageId = $lead->stage_id;
 
-                if (!$targetStageId) {
-                    $statusToken = $this->normalizeToken((string) ($lead->status ?? ''));
+            if (!$targetStageId) {
+                $statusToken = $this->normalizeToken((string) ($lead->status ?? ''));
 
-                    if ($statusToken === 'won') {
-                        $statusToken = 'closed_won';
-                    } elseif ($statusToken === 'lost') {
-                        $statusToken = 'closed_lost';
-                    }
-
-                    $targetStageId = $stageNameToId[$statusToken] ?? null;
+                if ($statusToken === 'won') {
+                    $statusToken = 'closed_won';
+                } elseif ($statusToken === 'lost') {
+                    $statusToken = 'closed_lost';
                 }
 
-                if (!$targetStageId) {
-                    $fallback = $stages->first();
-                    $targetStageId = $fallback?->id;
-                }
-
-                if ($targetStageId) {
-                    // Convert to array to avoid caching incomplete objects
-                    $groupedLeads[$targetStageId][] = (array) $lead;
-                }
+                $targetStageId = $stageNameToId[$statusToken] ?? null;
             }
 
-            $result = [];
-            foreach ($stages as $stage) {
-                $result[] = [
-                    'id' => $stage->id,
-                    'name' => $stage->name,
-                    'order_index' => (int) $stage->order_index,
-                    'leads' => array_map(fn($lead) => (object) $lead, $groupedLeads[$stage->id] ?? []),
-                ];
+            if (!$targetStageId) {
+                $fallback = $stages->first();
+                $targetStageId = $fallback?->id;
             }
 
-            return $result;
-        });
+            if ($targetStageId) {
+                $groupedLeads[$targetStageId][] = $lead;
+            }
+        }
+
+        $result = [];
+        foreach ($stages as $stage) {
+            $result[] = [
+                'id' => $stage->id,
+                'name' => $stage->name,
+                'order_index' => (int) $stage->order_index,
+                'leads' => $groupedLeads[$stage->id] ?? [],
+            ];
+        }
+
+        return $result;
     }
 
     public function createStage(string $tenantId, array $payload): array

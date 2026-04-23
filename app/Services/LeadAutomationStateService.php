@@ -13,9 +13,10 @@ class LeadAutomationStateService
     public function annotateLead(string $tenantId, object $lead): object
     {
         $settings = $this->tenantAutomationSettingsService->resolve($tenantId);
-        $lead->needs_follow_up = $this->needsFollowUp($lead, $settings['follow_up_threshold_minutes']);
+        $normalizedLead = $this->normalizeLead($lead);
+        $normalizedLead->needs_follow_up = $this->needsFollowUp($normalizedLead, $settings['follow_up_threshold_minutes']);
 
-        return $lead;
+        return $normalizedLead;
     }
 
     public function annotateLeadCollection(string $tenantId, array $leads): array
@@ -23,12 +24,10 @@ class LeadAutomationStateService
         $settings = $this->tenantAutomationSettingsService->resolve($tenantId);
 
         return array_map(function ($lead) use ($settings) {
-            // Convert to array/object to create a fresh copy, avoiding cached object issues
-            if (!is_object($lead)) {
-                $lead = (object) $lead;
-            }
-            $lead->needs_follow_up = $this->needsFollowUp($lead, $settings['follow_up_threshold_minutes']);
-            return $lead;
+            $normalizedLead = $this->normalizeLead($lead);
+            $normalizedLead->needs_follow_up = $this->needsFollowUp($normalizedLead, $settings['follow_up_threshold_minutes']);
+
+            return $normalizedLead;
         }, $leads);
     }
 
@@ -83,11 +82,27 @@ class LeadAutomationStateService
     private function getProperty(object $lead, string $key): mixed
     {
         try {
-            // Use isset to avoid errors on incomplete objects
             return $lead->$key ?? null;
-        } catch (\Exception) {
+        } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function normalizeLead(mixed $lead): object
+    {
+        if (is_array($lead)) {
+            return (object) $lead;
+        }
+
+        if (is_object($lead)) {
+            try {
+                return (object) get_object_vars($lead);
+            } catch (\Throwable) {
+                return (object) [];
+            }
+        }
+
+        return (object) [];
     }
 
     private function safeParse(?string $value): ?CarbonImmutable
@@ -97,7 +112,7 @@ class LeadAutomationStateService
         }
         try {
             return CarbonImmutable::parse($value);
-        } catch (\Exception) {
+        } catch (\Throwable) {
             return null;
         }
     }
