@@ -35,4 +35,15 @@ class MessageRepository
                 'lead_id' => $leadId,
             ]);
     }
+
+    public function getForLead(string $leadId, string $tenantId, int $perPage = 50): array
+    {
+        return DB::table('messages')
+            ->where('lead_id', $leadId)
+            ->where('tenant_id', $tenantId)
+            ->orderBy('created_at', 'asc')
+            ->limit($perPage)
+            ->get()
+            ->all();
+    }
 }

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Repositories\LeadRepository;
+use App\Repositories\MessageRepository;
 use App\Repositories\PipelineRepository;
 use App\Repositories\UserAssignmentRepository;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +12,7 @@ class LeadService
 {
     public function __construct(
         protected LeadRepository $leadRepo,
+        protected MessageRepository $messageRepository,
         protected PipelineRepository $pipelineRepository,
         protected UserAssignmentRepository $userAssignmentRepository,
     ) {}
@@ -84,6 +86,22 @@ class LeadService
         $this->pipelineRepository->forgetCache($tenantId);
 
         return $result;
+    }
+
+    public function getLead(array $auth, string $id): ?object
+    {
+        return $this->leadRepo->findByIdForTenant($id, $auth['tenant_id']);
+    }
+
+    public function getLeadMessages(array $auth, string $leadId, int $perPage = 50): array
+    {
+        // Verify lead belongs to tenant before returning messages
+        $lead = $this->leadRepo->findByIdForTenant($leadId, $auth['tenant_id']);
+        if (!$lead) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Lead not found');
+        }
+
+        return $this->messageRepository->getForLead($leadId, $auth['tenant_id'], $perPage);
     }
 
     public function listLeads(array $auth, array $params)

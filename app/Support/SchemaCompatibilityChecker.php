@@ -2,12 +2,26 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class SchemaCompatibilityChecker
 {
+    private const CACHE_KEY = 'schema_compat_result';
+    private const CACHE_TTL = 3600; // 1 hour
+
     public function check(): array
+    {
+        try {
+            return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, fn () => $this->runCheck());
+        } catch (\Throwable) {
+            // Cache unavailable — run uncached rather than blocking boot
+            return $this->runCheck();
+        }
+    }
+
+    private function runCheck(): array
     {
         $errors = [];
         $warnings = [];

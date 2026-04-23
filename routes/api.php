@@ -49,10 +49,12 @@ Route::prefix('v1')->group(function () {
             LeadController::class,
             'storeActivity',
         ]);
+        Route::get('/leads/{id}/messages', [LeadController::class, 'listMessages']);
 
         Route::patch('/leads/{id}/move', [LeadController::class, 'move'])->middleware('throttle:lead-write');
         Route::patch('/leads/{id}/stage', [PipelineController::class, 'moveLeadStage'])
             ->middleware('throttle:lead-write');
+        Route::get('/leads/{id}', [LeadController::class, 'show']);
         Route::patch('/leads/{id}', [LeadController::class, 'update']);
         Route::delete('/leads/{id}', [LeadController::class, 'destroy']);
     });
