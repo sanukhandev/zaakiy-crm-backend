@@ -9,14 +9,18 @@ class WhatsAppNormalizer
 {
     public function normalizeLead(array $payload): WebhookLeadPayload
     {
+        $value = $payload['value']
+            ?? $payload['entry'][0]['changes'][0]['value']
+            ?? [];
+
         $phone = $payload['phone']
             ?? $payload['from']
-            ?? $payload['value']['messages'][0]['from']
+            ?? $value['messages'][0]['from']
             ?? null;
 
         $name = $payload['name']
             ?? $payload['contact_name']
-            ?? $payload['value']['contacts'][0]['profile']['name']
+            ?? $value['contacts'][0]['profile']['name']
             ?? null;
 
         return WebhookLeadPayload::fromArray([
@@ -29,14 +33,18 @@ class WhatsAppNormalizer
 
     public function normalizeInboundMessage(array $payload): array
     {
+        $value = $payload['value']
+            ?? $payload['entry'][0]['changes'][0]['value']
+            ?? [];
+
         $phone = $payload['phone']
             ?? $payload['from']
-            ?? $payload['value']['messages'][0]['from']
+            ?? $value['messages'][0]['from']
             ?? null;
 
         $message = $payload['message']
             ?? $payload['text']
-            ?? $payload['value']['messages'][0]['text']['body']
+            ?? $value['messages'][0]['text']['body']
             ?? null;
 
         if (empty($phone) || empty($message)) {
@@ -50,7 +58,7 @@ class WhatsAppNormalizer
             'external_id' => (string) (
                 $payload['external_id']
                 ?? $payload['message_id']
-                ?? $payload['value']['messages'][0]['id']
+                ?? $value['messages'][0]['id']
                 ?? ''
             ) ?: null,
             'metadata' => $payload,

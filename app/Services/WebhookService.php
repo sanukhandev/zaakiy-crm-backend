@@ -68,6 +68,9 @@ class WebhookService
             $payload['account_id']
             ?? $payload['business_account_id']
             ?? $payload['entry'][0]['id']
+            ?? $payload['entry'][0]['changes'][0]['value']['metadata']['phone_number_id']
+            ?? $payload['entry'][0]['changes'][0]['value']['metadata']['display_phone_number']
+            ?? $payload['entry'][0]['changes'][0]['value']['business_id']
             ?? $payload['tenant_hint']
             ?? ''
         );
