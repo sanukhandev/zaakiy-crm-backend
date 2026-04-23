@@ -123,7 +123,8 @@ class PipelineRepository
                 }
 
                 if ($targetStageId) {
-                    $groupedLeads[$targetStageId][] = $lead;
+                    // Convert to array to avoid caching incomplete objects
+                    $groupedLeads[$targetStageId][] = (array) $lead;
                 }
             }
 
@@ -133,7 +134,7 @@ class PipelineRepository
                     'id' => $stage->id,
                     'name' => $stage->name,
                     'order_index' => (int) $stage->order_index,
-                    'leads' => $groupedLeads[$stage->id] ?? [],
+                    'leads' => array_map(fn($lead) => (object) $lead, $groupedLeads[$stage->id] ?? []),
                 ];
             }
 
