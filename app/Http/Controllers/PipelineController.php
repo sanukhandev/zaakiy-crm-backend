@@ -41,6 +41,38 @@ class PipelineController extends Controller
 
         $data = $this->pipelineService->getPipeline($auth);
 
+        // Backward compatibility: old frontend expects /pipeline as status-keyed board.
+        if (str_ends_with($request->path(), '/pipeline')) {
+            $board = [
+                'new' => [],
+                'contacted' => [],
+                'qualified' => [],
+                'won' => [],
+                'lost' => [],
+            ];
+
+            foreach ($data as $stage) {
+                $token = strtolower(str_replace([' ', '-'], '_', (string) ($stage['name'] ?? '')));
+
+                $key = match ($token) {
+                    'new' => 'new',
+                    'contacted' => 'contacted',
+                    'qualified', 'proposal' => 'qualified',
+                    'won', 'closed_won' => 'won',
+                    'lost', 'closed_lost' => 'lost',
+                    default => null,
+                };
+
+                if (!$key) {
+                    continue;
+                }
+
+                $board[$key] = array_merge($board[$key], $stage['leads'] ?? []);
+            }
+
+            return $this->success($board, 'Pipeline fetched successfully');
+        }
+
         return $this->success($data, 'Pipeline fetched successfully');
     }
 

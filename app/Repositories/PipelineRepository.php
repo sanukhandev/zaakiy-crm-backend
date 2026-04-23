@@ -71,6 +71,15 @@ class PipelineRepository
         return $stage?->id;
     }
 
+    private function normalizeToken(?string $value): string
+    {
+        if (!$value) {
+            return '';
+        }
+
+        return strtolower(str_replace([' ', '-'], '_', trim($value)));
+    }
+
     public function getPipeline(string $tenantId): array
     {
         $this->ensureDefaultStages($tenantId);
@@ -87,9 +96,35 @@ class PipelineRepository
                 ->orderBy('position')
                 ->get();
 
+            $stageNameToId = [];
+            foreach ($stages as $stage) {
+                $stageNameToId[$this->normalizeToken($stage->name)] = $stage->id;
+            }
+
             $groupedLeads = [];
             foreach ($leadRows as $lead) {
-                $groupedLeads[$lead->stage_id ?? ''][] = $lead;
+                $targetStageId = $lead->stage_id;
+
+                if (!$targetStageId) {
+                    $statusToken = $this->normalizeToken((string) ($lead->status ?? ''));
+
+                    if ($statusToken === 'won') {
+                        $statusToken = 'closed_won';
+                    } elseif ($statusToken === 'lost') {
+                        $statusToken = 'closed_lost';
+                    }
+
+                    $targetStageId = $stageNameToId[$statusToken] ?? null;
+                }
+
+                if (!$targetStageId) {
+                    $fallback = $stages->first();
+                    $targetStageId = $fallback?->id;
+                }
+
+                if ($targetStageId) {
+                    $groupedLeads[$targetStageId][] = $lead;
+                }
             }
 
             $result = [];
