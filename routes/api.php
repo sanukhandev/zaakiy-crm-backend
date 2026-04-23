@@ -5,11 +5,20 @@ use App\Http\Controllers\SessionController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\PipelineController;
+use App\Http\Controllers\WebhookController;
+use App\Http\Controllers\WebhookKeyController;
+use Illuminate\Support\Facades\DB;
 
 Route::prefix('v1')->group(function () {
     Route::get('/health', function () {
         return response()->json(['status' => 'ok']);
     });
+
+    Route::post('/webhooks/meta', [WebhookController::class, 'meta'])
+        ->middleware('throttle:webhook-ingest');
+    Route::post('/webhooks/whatsapp', [WebhookController::class, 'whatsapp'])
+        ->middleware('throttle:webhook-ingest');
+
     Route::middleware(['auth.api'])->group(function () {
         Route::get('/me', function (\Illuminate\Http\Request $request) {
             return response()->json([
@@ -18,7 +27,29 @@ Route::prefix('v1')->group(function () {
             ]);
         });
         Route::get('/session', [SessionController::class, 'getSession']);
+        Route::get('/webhooks/whatsapp/key', [WebhookKeyController::class, 'showWhatsAppKey']);
+        Route::post('/webhooks/whatsapp/key/regenerate', [WebhookKeyController::class, 'regenerateWhatsAppKey'])
+            ->middleware('throttle:bulk-write');
+
+        Route::get('/users', function (\Illuminate\Http\Request $request) {
+            $auth = $request->attributes->get('auth');
+            if (empty($auth['tenant_id'])) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+            $users = DB::table('users')
+                ->where('tenant_id', $auth['tenant_id'])
+                ->select(['id', 'name', 'email', 'role'])
+                ->orderBy('name')
+                ->get();
+            return response()->json(['success' => true, 'data' => $users, 'meta' => [], 'message' => 'Users fetched']);
+        });
+
         Route::get('/pipeline', [PipelineController::class, 'index']);
+        Route::get('/pipelines', [PipelineController::class, 'index']);
+        Route::post('/pipelines/stages', [PipelineController::class, 'storeStage'])
+            ->middleware('throttle:bulk-write');
+        Route::patch('/pipelines/stages/{id}', [PipelineController::class, 'updateStage'])
+            ->middleware('throttle:bulk-write');
         Route::get('/leads', [LeadController::class, 'index']);
         Route::post('/leads', [LeadController::class, 'store'])->middleware('throttle:lead-write');
 
@@ -37,8 +68,12 @@ Route::prefix('v1')->group(function () {
             LeadController::class,
             'storeActivity',
         ]);
+        Route::get('/leads/{id}/messages', [LeadController::class, 'listMessages']);
 
         Route::patch('/leads/{id}/move', [LeadController::class, 'move'])->middleware('throttle:lead-write');
+        Route::patch('/leads/{id}/stage', [PipelineController::class, 'moveLeadStage'])
+            ->middleware('throttle:lead-write');
+        Route::get('/leads/{id}', [LeadController::class, 'show']);
         Route::patch('/leads/{id}', [LeadController::class, 'update']);
         Route::delete('/leads/{id}', [LeadController::class, 'destroy']);
     });

@@ -51,6 +51,22 @@ class LeadController extends Controller
         ]);
     }
 
+    public function show(Request $request, string $id): JsonResponse
+    {
+        $auth = $this->resolveAuth($request);
+        if (!$auth) {
+            return $this->failure('Unauthorized', null, [], 401);
+        }
+
+        $lead = $this->leadService->getLead($auth, $id);
+
+        if (!$lead) {
+            return $this->failure('Lead not found', null, [], 404);
+        }
+
+        return $this->success($lead, 'Lead fetched successfully');
+    }
+
     public function store(
         \App\Http\Requests\StoreLeadRequest $request,
     ): JsonResponse {
@@ -176,6 +192,19 @@ class LeadController extends Controller
                 'total' => $data->total(),
             ],
         );
+    }
+
+    public function listMessages(Request $request, string $id): JsonResponse
+    {
+        $auth = $this->resolveAuth($request);
+        if (!$auth) {
+            return $this->failure('Unauthorized', null, [], 401);
+        }
+
+        $perPage = min((int) ($request->query('per_page', 50)), 200);
+        $messages = $this->leadService->getLeadMessages($auth, $id, $perPage);
+
+        return $this->success($messages, 'Messages fetched successfully');
     }
 
     public function bulkUpdate(BulkLeadUpdateRequest $request): JsonResponse

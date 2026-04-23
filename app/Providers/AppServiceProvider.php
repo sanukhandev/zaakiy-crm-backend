@@ -36,6 +36,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(30)->by($tenant . '|' . $request->ip());
         });
 
+        RateLimiter::for('webhook-ingest', function (Request $request) {
+            $key = (string) ($request->header('X-Webhook-Key') ?? 'anonymous');
+
+            return Limit::perMinute(180)->by($key . '|' . $request->ip());
+        });
+
         if (!config('app.schema_compat_check_on_boot', true)) {
             return;
         }

@@ -99,10 +99,10 @@ class LeadRepository
     public function getPaginated(string $tenantId, array $filters = [])
     {
         $cacheKey = $this->paginatedCacheKey($tenantId, $filters);
+        $perPage = min((int) ($filters['per_page'] ?? 10), 100);
+        $page = max((int) ($filters['page'] ?? 1), 1);
 
-        return CacheHelper::remember($cacheKey, function () use ($tenantId, $filters) {
-            $perPage = min((int) ($filters['per_page'] ?? 10), 100);
-
+        $cached = CacheHelper::remember($cacheKey, function () use ($tenantId, $filters, $perPage, $page) {
             $query = DB::table('leads')
                 ->where('tenant_id', $tenantId)
                 ->whereNull('deleted_at');
@@ -117,6 +117,10 @@ class LeadRepository
 
             if (!empty($filters['assigned_to'])) {
                 $query->where('assigned_to', $filters['assigned_to']);
+            }
+
+            if (!empty($filters['stage_id'])) {
+                $query->where('stage_id', $filters['stage_id']);
             }
 
             if (!empty($filters['search'])) {
@@ -140,8 +144,19 @@ class LeadRepository
 
             $query->orderBy($sortBy, $sortOrder);
 
-            return $query->paginate($perPage);
+            $total = (clone $query)->count();
+            $items = $query->skip(($page - 1) * $perPage)->take($perPage)->get()->toArray();
+
+            return ['total' => $total, 'items' => $items, 'per_page' => $perPage, 'page' => $page];
         });
+
+        return new \Illuminate\Pagination\LengthAwarePaginator(
+            $cached['items'],
+            $cached['total'],
+            $cached['per_page'],
+            $cached['page'],
+            ['path' => \Illuminate\Pagination\Paginator::resolveCurrentPath()],
+        );
     }
 
     public function getPipeline(string $tenantId): array
@@ -450,6 +465,94 @@ class LeadRepository
         return $lead;
     }
 
+    public function findByIdForTenant(string $id, string $tenantId): ?object
+    {
+        return DB::table('leads')
+            ->where('id', $id)
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
+    public function findByPhone(string $tenantId, string $phone): ?object
+    {
+        return DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->where('phone', $phone)
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
+    private function decodeMetadata(mixed $value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if (!is_string($value) || trim($value) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    public function createOrUpdateFromWebhook(
+        string $tenantId,
+        array $payload,
+        ?string $assignedTo,
+        ?string $stageId,
+    ): array {
+        return DB::transaction(function () use ($tenantId, $payload, $assignedTo, $stageId) {
+            $duplicate = $this->findDuplicate($tenantId, $payload);
+
+            $incomingMetadata = is_array($payload['metadata'] ?? null)
+                ? $payload['metadata']
+                : [];
+
+            if ($duplicate) {
+                $existingMetadata = $this->decodeMetadata($duplicate->metadata ?? null);
+
+                DB::table('leads')
+                    ->where('id', $duplicate->id)
+                    ->where('tenant_id', $tenantId)
+                    ->update([
+                        'name' => $payload['name'] ?? $duplicate->name,
+                        'phone' => $payload['phone'] ?? $duplicate->phone,
+                        'email' => $payload['email'] ?? $duplicate->email,
+                        'source' => $payload['source'] ?? $duplicate->source,
+                        'metadata' => json_encode(array_merge($existingMetadata, $incomingMetadata)),
+                        'updated_at' => now(),
+                    ]);
+
+                $this->bustCache($tenantId);
+
+                return [
+                    'id' => $duplicate->id,
+                    'action' => 'updated',
+                ];
+            }
+
+            $id = $this->create([
+                'tenant_id' => $tenantId,
+                'name' => $payload['name'] ?? ($payload['phone'] ?? 'Webhook Lead'),
+                'phone' => $payload['phone'] ?? null,
+                'email' => $payload['email'] ?? null,
+                'source' => $payload['source'] ?? 'webhook',
+                'status' => $payload['status'] ?? 'new',
+                'stage_id' => $stageId,
+                'assigned_to' => $assignedTo,
+                'metadata' => json_encode($incomingMetadata),
+            ]);
+
+            return [
+                'id' => $id,
+                'action' => 'created',
+            ];
+        });
+    }
+
     public function addActivity(
         string $leadId,
         array $auth,
@@ -465,7 +568,7 @@ class LeadRepository
             'tenant_id' => $auth['tenant_id'],
             'type' => $payload['type'],
             'content' => $payload['content'],
-            'created_by' => $auth['user_id'],
+            'created_by' => $auth['user_id'] ?? null,
             'created_at' => now(),
         ]);
 

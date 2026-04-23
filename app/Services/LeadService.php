@@ -3,14 +3,23 @@
 namespace App\Services;
 
 use App\Repositories\LeadRepository;
+use App\Repositories\MessageRepository;
+use App\Repositories\PipelineRepository;
+use App\Repositories\UserAssignmentRepository;
+use Illuminate\Support\Facades\DB;
 
 class LeadService
 {
-    protected $leadRepo;
+    public function __construct(
+        protected LeadRepository $leadRepo,
+        protected MessageRepository $messageRepository,
+        protected PipelineRepository $pipelineRepository,
+        protected UserAssignmentRepository $userAssignmentRepository,
+    ) {}
 
-    public function __construct(LeadRepository $leadRepo)
+    private function resolveAutoAssignee(string $tenantId): ?string
     {
-        $this->leadRepo = $leadRepo;
+        return $this->userAssignmentRepository->findLeastLoadedSalesUserId($tenantId);
     }
 
     public function createLead(array $auth, array $payload)
@@ -27,18 +36,72 @@ class LeadService
             ];
         }
 
-        $id = $this->leadRepo->create([
-            'tenant_id' => $auth['tenant_id'],
-            'name' => $payload['name'],
-            'phone' => $payload['phone'] ?? null,
-            'email' => $payload['email'] ?? null,
-            'source' => $payload['source'] ?? null,
-            'status' => $payload['status'] ?? 'new',
-            'assigned_to' => $payload['assigned_to'] ?? $auth['user_id'],
-            'metadata' => json_encode($payload['metadata'] ?? []),
-        ]);
+        $tenantId = $auth['tenant_id'];
+        $assignedTo = $payload['assigned_to'] ?? $this->resolveAutoAssignee($tenantId);
+        $stageId = $payload['stage_id'] ?? $this->pipelineRepository->getFirstStageId($tenantId);
+
+        $id = DB::transaction(function () use ($tenantId, $payload, $assignedTo, $stageId) {
+            $leadId = $this->leadRepo->create([
+                'tenant_id' => $tenantId,
+                'name' => $payload['name'],
+                'phone' => $payload['phone'] ?? null,
+                'email' => $payload['email'] ?? null,
+                'source' => $payload['source'] ?? null,
+                'status' => $payload['status'] ?? 'new',
+                'stage_id' => $stageId,
+                'assigned_to' => $assignedTo,
+                'metadata' => json_encode($payload['metadata'] ?? []),
+            ]);
+
+            if ($assignedTo) {
+                $this->userAssignmentRepository->incrementCurrentLoad($tenantId, $assignedTo);
+            }
+
+            return $leadId;
+        });
+
+        $this->pipelineRepository->forgetCache($tenantId);
 
         return ['id' => $id];
+    }
+
+    public function createOrUpdateLeadFromWebhook(
+        string $tenantId,
+        array $payload,
+    ): array {
+        $assignedTo = $this->resolveAutoAssignee($tenantId);
+        $stageId = $this->pipelineRepository->getFirstStageId($tenantId);
+
+        $result = $this->leadRepo->createOrUpdateFromWebhook(
+            $tenantId,
+            $payload,
+            $assignedTo,
+            $stageId,
+        );
+
+        if (($result['action'] ?? null) === 'created' && $assignedTo) {
+            $this->userAssignmentRepository->incrementCurrentLoad($tenantId, $assignedTo);
+        }
+
+        $this->pipelineRepository->forgetCache($tenantId);
+
+        return $result;
+    }
+
+    public function getLead(array $auth, string $id): ?object
+    {
+        return $this->leadRepo->findByIdForTenant($id, $auth['tenant_id']);
+    }
+
+    public function getLeadMessages(array $auth, string $leadId, int $perPage = 50): array
+    {
+        // Verify lead belongs to tenant before returning messages
+        $lead = $this->leadRepo->findByIdForTenant($leadId, $auth['tenant_id']);
+        if (!$lead) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Lead not found');
+        }
+
+        return $this->messageRepository->getForLead($leadId, $auth['tenant_id'], $perPage);
     }
 
     public function listLeads(array $auth, array $params)
@@ -48,17 +111,26 @@ class LeadService
 
     public function updateLead(array $auth, string $id, array $payload)
     {
-        return $this->leadRepo->update($id, $auth, $payload);
+        $result = $this->leadRepo->update($id, $auth, $payload);
+        $this->pipelineRepository->forgetCache($auth['tenant_id']);
+
+        return $result;
     }
 
     public function moveLead(string $id, array $auth, array $payload)
     {
-        return $this->leadRepo->moveLead($id, $auth, $payload);
+        $result = $this->leadRepo->moveLead($id, $auth, $payload);
+        $this->pipelineRepository->forgetCache($auth['tenant_id']);
+
+        return $result;
     }
 
     public function deleteLead(array $auth, string $id): bool
     {
-        return $this->leadRepo->delete($id, $auth['tenant_id']);
+        $result = $this->leadRepo->delete($id, $auth['tenant_id']);
+        $this->pipelineRepository->forgetCache($auth['tenant_id']);
+
+        return $result;
     }
 
     public function addLeadActivity(
@@ -87,24 +159,35 @@ class LeadService
 
     public function bulkUpdateLeads(array $auth, array $payload): int
     {
-        return $this->leadRepo->bulkUpdate(
+        $affected = $this->leadRepo->bulkUpdate(
             $auth,
             $payload['lead_ids'],
             $payload,
         );
+
+        $this->pipelineRepository->forgetCache($auth['tenant_id']);
+
+        return $affected;
     }
 
     public function bulkAssignLeads(array $auth, array $payload): int
     {
-        return $this->leadRepo->bulkAssign(
+        $affected = $this->leadRepo->bulkAssign(
             $auth,
             $payload['lead_ids'],
             $payload['assigned_to'],
         );
+
+        $this->pipelineRepository->forgetCache($auth['tenant_id']);
+
+        return $affected;
     }
 
     public function bulkDeleteLeads(array $auth, array $payload): int
     {
-        return $this->leadRepo->bulkDelete($auth, $payload['lead_ids']);
+        $affected = $this->leadRepo->bulkDelete($auth, $payload['lead_ids']);
+        $this->pipelineRepository->forgetCache($auth['tenant_id']);
+
+        return $affected;
     }
 }
