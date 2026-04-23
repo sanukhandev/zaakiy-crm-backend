@@ -69,6 +69,8 @@ Route::prefix('v1')->group(function () {
             'storeActivity',
         ]);
         Route::get('/leads/{id}/messages', [LeadController::class, 'listMessages']);
+        Route::post('/leads/{id}/messages/whatsapp', [LeadController::class, 'sendWhatsAppMessage'])
+            ->middleware('throttle:lead-write');
 
         Route::patch('/leads/{id}/move', [LeadController::class, 'move'])->middleware('throttle:lead-write');
         Route::patch('/leads/{id}/stage', [PipelineController::class, 'moveLeadStage'])

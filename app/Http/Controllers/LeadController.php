@@ -6,18 +6,23 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Services\LeadService;
+use App\Services\WhatsAppService;
 use App\Support\ApiResponse;
 use App\Http\Requests\Lead\BulkLeadAssignRequest;
 use App\Http\Requests\Lead\BulkLeadDeleteRequest;
 use App\Http\Requests\Lead\BulkLeadUpdateRequest;
 use App\Http\Requests\Lead\MoveLeadRequest;
+use App\Http\Requests\Lead\SendWhatsAppMessageRequest;
 use App\Http\Requests\Lead\StoreLeadActivityRequest;
 
 class LeadController extends Controller
 {
     use ApiResponse;
 
-    public function __construct(protected LeadService $leadService) {}
+    public function __construct(
+        protected LeadService $leadService,
+        protected WhatsAppService $whatsAppService,
+    ) {}
 
     private function resolveAuth(Request $request): ?array
     {
@@ -205,6 +210,26 @@ class LeadController extends Controller
         $messages = $this->leadService->getLeadMessages($auth, $id, $perPage);
 
         return $this->success($messages, 'Messages fetched successfully');
+    }
+
+    public function sendWhatsAppMessage(SendWhatsAppMessageRequest $request, string $id): JsonResponse
+    {
+        $auth = $this->resolveAuth($request);
+        if (!$auth) {
+            return $this->failure('Unauthorized', null, [], 401);
+        }
+
+        try {
+            $message = $this->whatsAppService->sendOutbound($auth, $id, $request->validated()['content']);
+        } catch (ModelNotFoundException) {
+            return $this->failure('Lead not found', null, [], 404);
+        } catch (\InvalidArgumentException $error) {
+            return $this->failure($error->getMessage(), null, [], 422);
+        } catch (\RuntimeException $error) {
+            return $this->failure($error->getMessage(), null, [], 502);
+        }
+
+        return $this->success($message, 'WhatsApp message sent successfully', [], 201);
     }
 
     public function bulkUpdate(BulkLeadUpdateRequest $request): JsonResponse

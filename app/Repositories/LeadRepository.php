@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 use App\Support\CacheHelper;
+use App\Support\PhoneNumber;
 
 class LeadRepository
 {
@@ -79,6 +80,7 @@ class LeadRepository
 
     public function create(array $data): string
     {
+        $data['phone'] = PhoneNumber::normalize($data['phone'] ?? null);
         $data['id'] = $data['id'] ?? (string) Str::uuid();
         $data['created_at'] = now();
         $data['updated_at'] = now();
@@ -207,7 +209,7 @@ class LeadRepository
         }
 
         if (isset($payload['phone'])) {
-            $updateData['phone'] = $payload['phone'];
+            $updateData['phone'] = PhoneNumber::normalize($payload['phone']);
         }
 
         if (isset($payload['email'])) {
@@ -402,8 +404,9 @@ class LeadRepository
     }
     public function findDuplicate(string $tenantId, array $data): ?object
     {
+        $normalizedPhone = PhoneNumber::normalize($data['phone'] ?? null);
         $hasEmail = !empty($data['email']);
-        $hasPhone = !empty($data['phone']);
+        $hasPhone = !empty($normalizedPhone);
 
         if (!$hasEmail && !$hasPhone) {
             return null;
@@ -417,7 +420,7 @@ class LeadRepository
                     $q->orWhere('email', $data['email']);
                 }
                 if ($hasPhone) {
-                    $q->orWhere('phone', $data['phone']);
+                    $q->orWhere('phone', PhoneNumber::normalize($data['phone'] ?? null));
                 }
             })
             ->first();
@@ -476,9 +479,14 @@ class LeadRepository
 
     public function findByPhone(string $tenantId, string $phone): ?object
     {
+        $normalizedPhone = PhoneNumber::normalize($phone);
+        if (!$normalizedPhone) {
+            return null;
+        }
+
         return DB::table('leads')
             ->where('tenant_id', $tenantId)
-            ->where('phone', $phone)
+            ->where('phone', $normalizedPhone)
             ->whereNull('deleted_at')
             ->first();
     }
@@ -505,6 +513,7 @@ class LeadRepository
         ?string $stageId,
     ): array {
         return DB::transaction(function () use ($tenantId, $payload, $assignedTo, $stageId) {
+            $payload['phone'] = PhoneNumber::normalize($payload['phone'] ?? null);
             $duplicate = $this->findDuplicate($tenantId, $payload);
 
             $incomingMetadata = is_array($payload['metadata'] ?? null)

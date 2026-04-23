@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\PhoneNumber;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateLeadRequest extends FormRequest
@@ -43,7 +44,7 @@ class UpdateLeadRequest extends FormRequest
     {
         $this->merge([
             'email' => $this->email ? strtolower(trim($this->email)) : null,
-            'phone' => $this->phone ? trim($this->phone) : null,
+            'phone' => PhoneNumber::normalize($this->phone),
         ]);
     }
 

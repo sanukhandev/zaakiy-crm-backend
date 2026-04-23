@@ -3,6 +3,7 @@
 namespace App\Services\Webhooks\Normalizers;
 
 use App\DTOs\WebhookLeadPayload;
+use App\Support\PhoneNumber;
 use InvalidArgumentException;
 
 class WhatsAppNormalizer
@@ -25,7 +26,7 @@ class WhatsAppNormalizer
 
         return WebhookLeadPayload::fromArray([
             'name' => $name,
-            'phone' => $phone,
+            'phone' => PhoneNumber::normalize($phone),
             'email' => $payload['email'] ?? null,
             'metadata' => $payload,
         ], 'whatsapp');
@@ -52,7 +53,7 @@ class WhatsAppNormalizer
         }
 
         return [
-            'phone' => preg_replace('/\s+/', '', (string) $phone),
+            'phone' => PhoneNumber::normalize((string) $phone),
             'message' => (string) $message,
             'direction' => 'inbound',
             'external_id' => (string) (

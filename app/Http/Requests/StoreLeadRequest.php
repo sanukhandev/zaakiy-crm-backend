@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\PhoneNumber;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -37,7 +38,7 @@ class StoreLeadRequest extends FormRequest
     {
         $this->merge([
             'email' => $this->email ? strtolower(trim($this->email)) : null,
-            'phone' => $this->phone ? trim($this->phone) : null,
+            'phone' => PhoneNumber::normalize($this->phone),
         ]);
     }
 

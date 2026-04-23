@@ -26,6 +26,25 @@ class MessageRepository
         return $id;
     }
 
+    public function createOutbound(array $payload): string
+    {
+        $id = (string) Str::uuid();
+
+        DB::table('messages')->insert([
+            'id' => $id,
+            'tenant_id' => $payload['tenant_id'],
+            'lead_id' => $payload['lead_id'],
+            'channel' => 'whatsapp',
+            'sender' => $payload['sender'] ?? 'crm',
+            'content' => $payload['message'],
+            'direction' => 'outbound',
+            'external_id' => $payload['external_id'] ?? null,
+            'created_at' => now(),
+        ]);
+
+        return $id;
+    }
+
     public function linkLead(string $messageId, string $tenantId, string $leadId): void
     {
         DB::table('messages')
@@ -45,5 +64,13 @@ class MessageRepository
             ->limit($perPage)
             ->get()
             ->all();
+    }
+
+    public function findByExternalId(string $tenantId, string $externalId): ?object
+    {
+        return DB::table('messages')
+            ->where('tenant_id', $tenantId)
+            ->where('external_id', $externalId)
+            ->first();
     }
 }
