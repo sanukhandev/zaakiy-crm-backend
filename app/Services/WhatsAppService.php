@@ -16,6 +16,7 @@ class WhatsAppService
         protected MessageRepository $messageRepository,
         protected LeadRepository $leadRepository,
         protected LeadService $leadService,
+        protected TenantWhatsAppIntegrationService $tenantWhatsAppIntegrationService,
     ) {}
 
     public function ingestInbound(string $tenantId, array $payload): array
@@ -132,12 +133,13 @@ class WhatsAppService
 
     private function sendViaProvider(string $phone, string $content, string $tenantId, string $leadId): array
     {
-        $baseUrl = rtrim((string) config('services.whatsapp.base_url'), '/');
-        $apiVersion = trim((string) config('services.whatsapp.api_version', 'v21.0'), '/');
-        $phoneNumberId = (string) config('services.whatsapp.phone_number_id');
-        $accessToken = (string) config('services.whatsapp.access_token');
+        $providerConfig = $this->tenantWhatsAppIntegrationService->resolveProviderConfig($tenantId);
+        $baseUrl = rtrim((string) ($providerConfig['base_url'] ?? ''), '/');
+        $apiVersion = trim((string) ($providerConfig['api_version'] ?? 'v21.0'), '/');
+        $phoneNumberId = (string) ($providerConfig['phone_number_id'] ?? '');
+        $accessToken = (string) ($providerConfig['access_token'] ?? '');
 
-        if ($baseUrl === '' || $phoneNumberId === '' || $accessToken === '') {
+        if (!$providerConfig['is_active'] || $baseUrl === '' || $phoneNumberId === '' || $accessToken === '') {
             throw new RuntimeException('WhatsApp provider configuration is incomplete');
         }
 

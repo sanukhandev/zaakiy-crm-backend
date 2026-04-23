@@ -5,6 +5,7 @@ use App\Http\Controllers\SessionController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\PipelineController;
+use App\Http\Controllers\TenantWhatsAppIntegrationController;
 use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\WebhookKeyController;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +28,9 @@ Route::prefix('v1')->group(function () {
             ]);
         });
         Route::get('/session', [SessionController::class, 'getSession']);
+        Route::get('/integrations/whatsapp', [TenantWhatsAppIntegrationController::class, 'show']);
+        Route::put('/integrations/whatsapp', [TenantWhatsAppIntegrationController::class, 'update'])
+            ->middleware('throttle:bulk-write');
         Route::get('/webhooks/whatsapp/key', [WebhookKeyController::class, 'showWhatsAppKey']);
         Route::post('/webhooks/whatsapp/key/regenerate', [WebhookKeyController::class, 'regenerateWhatsAppKey'])
             ->middleware('throttle:bulk-write');
