@@ -6,6 +6,7 @@ use App\Http\Controllers\LeadController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\PipelineController;
 use App\Http\Controllers\WebhookController;
+use Illuminate\Support\Facades\DB;
 
 Route::prefix('v1')->group(function () {
     Route::get('/health', function () {
@@ -25,6 +26,20 @@ Route::prefix('v1')->group(function () {
             ]);
         });
         Route::get('/session', [SessionController::class, 'getSession']);
+
+        Route::get('/users', function (\Illuminate\Http\Request $request) {
+            $auth = $request->attributes->get('auth');
+            if (empty($auth['tenant_id'])) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+            $users = DB::table('users')
+                ->where('tenant_id', $auth['tenant_id'])
+                ->select(['id', 'name', 'email', 'role'])
+                ->orderBy('name')
+                ->get();
+            return response()->json(['success' => true, 'data' => $users, 'meta' => [], 'message' => 'Users fetched']);
+        });
+
         Route::get('/pipeline', [PipelineController::class, 'index']);
         Route::get('/pipelines', [PipelineController::class, 'index']);
         Route::post('/pipelines/stages', [PipelineController::class, 'storeStage'])
