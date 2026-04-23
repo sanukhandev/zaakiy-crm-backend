@@ -73,4 +73,13 @@ class MessageRepository
             ->where('external_id', $externalId)
             ->first();
     }
+
+    public function countForLeadByDirection(string $leadId, string $tenantId, string $direction): int
+    {
+        return (int) DB::table('messages')
+            ->where('lead_id', $leadId)
+            ->where('tenant_id', $tenantId)
+            ->where('direction', $direction)
+            ->count();
+    }
 }

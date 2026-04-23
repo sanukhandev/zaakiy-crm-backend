@@ -220,8 +220,9 @@ class LeadRepository
             $updateData['source'] = $payload['source'];
         }
 
-        $updateData['assigned_to'] =
-            $payload['assigned_to'] ?? $auth['user_id'];
+        if (array_key_exists('assigned_to', $payload)) {
+            $updateData['assigned_to'] = $payload['assigned_to'];
+        }
 
         // 3. Handle metadata safely
         if (isset($payload['metadata'])) {
@@ -581,6 +582,16 @@ class LeadRepository
             'created_at' => now(),
         ]);
 
+        if (Schema::hasColumn('leads', 'last_activity_at')) {
+            DB::table('leads')
+                ->where('id', $leadId)
+                ->where('tenant_id', $auth['tenant_id'])
+                ->update([
+                    'last_activity_at' => now(),
+                    'updated_at' => now(),
+                ]);
+        }
+
         return $id;
     }
 
@@ -732,5 +743,44 @@ class LeadRepository
         ]);
 
         return $affected;
+    }
+
+    public function getAssignedUsersForLeadIds(string $tenantId, array $leadIds): array
+    {
+        return DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $leadIds)
+            ->whereNull('deleted_at')
+            ->pluck('assigned_to')
+            ->all();
+    }
+
+    public function updateAutomationState(string $leadId, string $tenantId, array $attributes): void
+    {
+        if ($attributes === []) {
+            return;
+        }
+
+        $updates = [];
+
+        foreach (['last_inbound_at', 'last_outbound_at', 'last_activity_at', 'auto_replied_at'] as $field) {
+            if (array_key_exists($field, $attributes) && Schema::hasColumn('leads', $field)) {
+                $updates[$field] = $attributes[$field];
+            }
+        }
+
+        if ($updates === []) {
+            return;
+        }
+
+        $updates['updated_at'] = now();
+
+        DB::table('leads')
+            ->where('id', $leadId)
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->update($updates);
+
+        $this->bustCache($tenantId);
     }
 }

@@ -17,11 +17,12 @@ class WhatsAppService
         protected LeadRepository $leadRepository,
         protected LeadService $leadService,
         protected TenantWhatsAppIntegrationService $tenantWhatsAppIntegrationService,
+        protected LeadAutomationStateService $leadAutomationStateService,
     ) {}
 
     public function ingestInbound(string $tenantId, array $payload): array
     {
-        return DB::transaction(function () use ($tenantId, $payload) {
+        $result = DB::transaction(function () use ($tenantId, $payload) {
             $messageId = $this->messageRepository->createInbound([
                 'tenant_id' => $tenantId,
                 'phone' => $payload['phone'],
@@ -54,14 +55,42 @@ class WhatsAppService
                 'content' => $payload['message'],
             ]);
 
+            $this->leadRepository->updateAutomationState($lead->id, $tenantId, [
+                'last_inbound_at' => now(),
+            ]);
+
             return [
                 'message_id' => $messageId,
                 'lead_id' => $lead->id,
             ];
         });
+
+        $lead = $this->leadRepository->findByIdForTenant($result['lead_id'], $tenantId);
+        if ($lead) {
+            $inboundCount = $this->messageRepository->countForLeadByDirection($lead->id, $tenantId, 'inbound');
+
+            if ($this->leadAutomationStateService->shouldAutoReply($tenantId, $lead, $inboundCount)) {
+                $template = $this->leadAutomationStateService->getAutoReplyTemplate($tenantId);
+
+                try {
+                    $this->sendOutbound([
+                        'tenant_id' => $tenantId,
+                        'user_id' => null,
+                    ], $lead->id, $template, true);
+                } catch (\Throwable $error) {
+                    Log::warning('WhatsApp auto reply failed', [
+                        'tenant_id' => $tenantId,
+                        'lead_id' => $lead->id,
+                        'error' => $error->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        return $result;
     }
 
-    public function sendOutbound(array $auth, string $leadId, string $content): array
+    public function sendOutbound(array $auth, string $leadId, string $content, bool $isAutomated = false): array
     {
         $lead = $this->leadRepository->findByIdForTenant($leadId, $auth['tenant_id']);
 
@@ -73,6 +102,8 @@ class WhatsAppService
             throw new InvalidArgumentException('Lead phone number is required to send WhatsApp message');
         }
 
+        $providerConfig = $this->tenantWhatsAppIntegrationService->resolveProviderConfig($auth['tenant_id']);
+        $senderLabel = (string) ($providerConfig['sender_label'] ?? config('services.whatsapp.sender_label', 'crm'));
         $providerResponse = $this->sendViaProvider((string) $lead->phone, $content, $auth['tenant_id'], $leadId);
         $externalId = $providerResponse['external_id'] ?? null;
 
@@ -94,8 +125,7 @@ class WhatsAppService
             }
         }
 
-        return DB::transaction(function () use ($auth, $leadId, $content, $externalId) {
-            $senderLabel = config('services.whatsapp.sender_label', 'crm');
+        return DB::transaction(function () use ($auth, $leadId, $content, $externalId, $senderLabel, $isAutomated) {
             $messageId = $this->messageRepository->createOutbound([
                 'tenant_id' => $auth['tenant_id'],
                 'lead_id' => $leadId,
@@ -105,9 +135,19 @@ class WhatsAppService
             ]);
 
             $this->leadRepository->addActivity($leadId, $auth, [
-                'type' => 'whatsapp',
+                'type' => $isAutomated ? 'auto_reply' : 'whatsapp',
                 'content' => $content,
             ]);
+
+            $automationState = [
+                'last_outbound_at' => now(),
+            ];
+
+            if ($isAutomated) {
+                $automationState['auto_replied_at'] = now();
+            }
+
+            $this->leadRepository->updateAutomationState($leadId, $auth['tenant_id'], $automationState);
 
             Log::info('WhatsApp outbound message sent', [
                 'tenant_id' => $auth['tenant_id'],
@@ -115,6 +155,7 @@ class WhatsAppService
                 'message_id' => $messageId,
                 'external_id' => $externalId,
                 'user_id' => $auth['user_id'] ?? null,
+                'is_automated' => $isAutomated,
             ]);
 
             return [

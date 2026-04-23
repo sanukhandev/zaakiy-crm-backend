@@ -6,11 +6,23 @@ use App\Repositories\PipelineRepository;
 
 class PipelineService
 {
-    public function __construct(protected PipelineRepository $pipelineRepository) {}
+    public function __construct(
+        protected PipelineRepository $pipelineRepository,
+        protected LeadAutomationStateService $leadAutomationStateService,
+    ) {}
 
     public function getPipeline(array $auth): array
     {
-        return $this->pipelineRepository->getPipeline($auth['tenant_id']);
+        $stages = $this->pipelineRepository->getPipeline($auth['tenant_id']);
+
+        return array_map(function (array $stage) use ($auth) {
+            $stage['leads'] = $this->leadAutomationStateService->annotateLeadCollection(
+                $auth['tenant_id'],
+                $stage['leads'] ?? [],
+            );
+
+            return $stage;
+        }, $stages);
     }
 
     public function createStage(array $auth, array $payload): array
