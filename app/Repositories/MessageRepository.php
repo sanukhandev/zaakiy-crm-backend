@@ -89,4 +89,81 @@ class MessageRepository
             ->where('direction', 'inbound')
             ->count();
     }
+
+    public function updateStatus(string $tenantId, string $messageId, string $status): bool
+    {
+        return (bool) DB::table('messages')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $messageId)
+            ->update([
+                'status' => $status,
+                'updated_at' => now(),
+            ]);
+    }
+
+    public function updateStatusByExternalId(string $tenantId, string $externalId, string $status): bool
+    {
+        return (bool) DB::table('messages')
+            ->where('tenant_id', $tenantId)
+            ->where('external_id', $externalId)
+            ->update([
+                'status' => $status,
+                'updated_at' => now(),
+            ]);
+    }
+
+    public function getInboxMessages(
+        string $tenantId,
+        ?string $assignedTo = null,
+        bool $unreadOnly = false,
+        bool $needsFollowUp = false,
+        int $limit = 50,
+        int $offset = 0
+    ): array {
+        $query = DB::table('messages')
+            ->join('leads', 'messages.lead_id', '=', 'leads.id')
+            ->where('messages.tenant_id', $tenantId)
+            ->where('messages.direction', 'inbound');
+
+        if ($assignedTo) {
+            $query->where('leads.assigned_to', $assignedTo);
+        }
+
+        if ($unreadOnly) {
+            $query->where('leads.unread_count', '>', 0);
+        }
+
+        if ($needsFollowUp) {
+            $query->where('leads.needs_follow_up', true);
+        }
+
+        return $query
+            ->select(
+                'leads.id as lead_id',
+                'leads.name as lead_name',
+                'messages.content as last_message',
+                'messages.created_at as last_message_at',
+                'leads.unread_count',
+                'leads.assigned_to',
+                'messages.channel',
+                'leads.needs_follow_up'
+            )
+            ->distinct('messages.lead_id')
+            ->orderByDesc('messages.created_at')
+            ->limit($limit)
+            ->offset($offset)
+            ->get()
+            ->toArray();
+    }
+
+    public function getConversationMessages(string $tenantId, string $leadId, int $limit = 100): array
+    {
+        return DB::table('messages')
+            ->where('tenant_id', $tenantId)
+            ->where('lead_id', $leadId)
+            ->orderBy('created_at', 'asc')
+            ->limit($limit)
+            ->get()
+            ->toArray();
+    }
 }

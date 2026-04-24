@@ -70,4 +70,30 @@ class MessageService
     {
         return $this->repository->findLastInboundByLeadId($tenantId, $leadId);
     }
+
+    public function updateMessageStatus(string $tenantId, string $messageId, string $status): bool
+    {
+        return $this->repository->updateStatus($tenantId, $messageId, $status);
+    }
+
+    public function updateMessageStatusByExternalId(string $tenantId, string $externalId, string $status): bool
+    {
+        return $this->repository->updateStatusByExternalId($tenantId, $externalId, $status);
+    }
+
+    public function getInbox(
+        string $tenantId,
+        ?string $assignedTo = null,
+        bool $unreadOnly = false,
+        bool $needsFollowUp = false,
+        int $limit = 50,
+        int $offset = 0
+    ): array {
+        return $this->repository->getInboxMessages($tenantId, $assignedTo, $unreadOnly, $needsFollowUp, $limit, $offset);
+    }
+
+    public function getConversation(string $tenantId, string $leadId, int $limit = 100): array
+    {
+        return $this->repository->getConversationMessages($tenantId, $leadId, $limit);
+    }
 }

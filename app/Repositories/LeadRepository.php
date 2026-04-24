@@ -832,4 +832,54 @@ class LeadRepository
 
         $this->bustCache($tenantId);
     }
+
+    public function updateConversationMetadata(
+        string $tenantId,
+        string $leadId,
+        string $lastMessageDirection,
+        int $unreadCount = null
+    ): void {
+        $updates = [
+            'last_message_at' => now(),
+            'last_message_direction' => $lastMessageDirection,
+            'updated_at' => now(),
+        ];
+
+        if ($unreadCount !== null) {
+            $updates['unread_count'] = $unreadCount;
+        }
+
+        DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $leadId)
+            ->whereNull('deleted_at')
+            ->update($updates);
+
+        $this->bustCache($tenantId);
+    }
+
+    public function incrementUnreadCount(string $tenantId, string $leadId): void
+    {
+        DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $leadId)
+            ->whereNull('deleted_at')
+            ->increment('unread_count');
+
+        $this->bustCache($tenantId);
+    }
+
+    public function resetUnreadCount(string $tenantId, string $leadId): void
+    {
+        DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $leadId)
+            ->whereNull('deleted_at')
+            ->update([
+                'unread_count' => 0,
+                'updated_at' => now(),
+            ]);
+
+        $this->bustCache($tenantId);
+    }
 }

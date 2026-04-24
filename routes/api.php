@@ -3,6 +3,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\LeadController;
+use App\Http\Controllers\MessageController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\PipelineController;
 use App\Http\Controllers\TenantAutomationSettingsController;
@@ -19,6 +20,10 @@ Route::prefix('v1')->group(function () {
     Route::post('/webhooks/meta', [WebhookController::class, 'meta'])
         ->middleware('throttle:webhook-ingest');
     Route::post('/webhooks/whatsapp', [WebhookController::class, 'whatsapp'])
+        ->middleware('throttle:webhook-ingest');
+    Route::post('/webhooks/whatsapp/status', [WebhookController::class, 'whatsappStatus'])
+        ->middleware('throttle:webhook-ingest');
+    Route::post('/webhooks/meta/status', [WebhookController::class, 'metaStatus'])
         ->middleware('throttle:webhook-ingest');
 
     Route::middleware(['auth.api'])->group(function () {
@@ -79,6 +84,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/leads/{id}/messages', [LeadController::class, 'listMessages']);
         Route::post('/leads/{id}/messages/whatsapp', [LeadController::class, 'sendWhatsAppMessage'])
             ->middleware('throttle:lead-write');
+
+        Route::get('/inbox', [MessageController::class, 'getInbox']);
+        Route::post('/messages/send', [MessageController::class, 'send'])->middleware('throttle:lead-write');
+        Route::get('/messages', [MessageController::class, 'getMessages']);
+        Route::post('/messages/read/{lead_id}', [MessageController::class, 'markAsRead']);
 
         Route::patch('/leads/{id}/move', [LeadController::class, 'move'])->middleware('throttle:lead-write');
         Route::patch('/leads/{id}/stage', [PipelineController::class, 'moveLeadStage'])

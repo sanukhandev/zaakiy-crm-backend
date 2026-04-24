@@ -22,13 +22,23 @@ class LeadActivityService
         );
     }
 
-    public function logOutboundMessage(string $tenantId, string $leadId, string $content, ?string $createdBy = null): object
-    {
+    public function logOutboundMessage(
+        string $leadId,
+        string $tenantId,
+        string $messageId,
+        string $channel,
+        string $content,
+        ?string $createdBy = null
+    ): object {
         return $this->repository->create(
             $tenantId,
             $leadId,
             'message_outbound',
-            json_encode(['message' => $content]),
+            json_encode([
+                'message' => $content,
+                'channel' => $channel,
+                'message_id' => $messageId,
+            ]),
             $createdBy,
         );
     }
