@@ -38,12 +38,12 @@ class SendMessageService
             $dto->tenantId,
             $dto->leadId,
             $dto->channel,
-            'outbound',
             $dto->content,
-            null,
             $dto->externalId,
-            'sent',
+            $dto->metadata,
             $dto->createdBy,
+            'sent',
+            $senderUserId,
         );
 
         // Log activity
