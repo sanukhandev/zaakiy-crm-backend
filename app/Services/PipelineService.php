@@ -3,11 +3,9 @@
 namespace App\Services;
 
 use App\Events\LeadStageChanged;
-use App\Repositories\LeadActivityRepository;
 use App\Repositories\PipelineRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Log;
 
 class PipelineService
 {

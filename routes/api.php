@@ -4,7 +4,6 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\MessageController;
-use App\Http\Controllers\DocsController;
 use App\Http\Controllers\PipelineController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\AutomationRuleController;

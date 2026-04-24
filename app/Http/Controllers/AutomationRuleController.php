@@ -12,12 +12,6 @@ class AutomationRuleController extends Controller
 {
     use ApiResponse;
 
-    private const TRIGGERS = [
-        'lead_created',
-        'message_received',
-        'stage_changed',
-    ];
-
     private function resolveAuth(Request $request): ?array
     {
         $auth = $request->attributes->get('auth');
