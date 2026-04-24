@@ -91,7 +91,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/inbox/{leadId}/read', [MessageController::class, 'markInboxRead'])->middleware('throttle:lead-write');
         Route::post('/messages/send', [MessageController::class, 'send'])->middleware('throttle:lead-write');
         Route::get('/messages', [MessageController::class, 'getMessages']);
-        Route::post('/messages/read/{lead_id}', [MessageController::class, 'markAsRead']);
+        Route::post('/messages/read/{leadId}', [MessageController::class, 'markAsRead']);
 
         Route::patch('/leads/{id}/move', [LeadController::class, 'move'])->middleware('throttle:lead-write');
         Route::patch('/leads/{id}/stage', [PipelineController::class, 'moveLeadStage'])
