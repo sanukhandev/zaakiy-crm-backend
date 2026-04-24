@@ -783,4 +783,53 @@ class LeadRepository
 
         $this->bustCache($tenantId);
     }
+
+    public function findByPhoneOrEmailAndTenant(string $tenantId, ?string $phone, ?string $email): ?object
+    {
+        $query = DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at');
+
+        if ($phone && $email) {
+            $query->where(function ($q) use ($phone, $email) {
+                $q->orWhere('phone', PhoneNumber::normalize($phone))
+                  ->orWhere('email', $email);
+            });
+        } elseif ($phone) {
+            $query->where('phone', PhoneNumber::normalize($phone));
+        } elseif ($email) {
+            $query->where('email', $email);
+        } else {
+            return null;
+        }
+
+        return $query->first();
+    }
+
+    public function findById(string $tenantId, string $id): ?object
+    {
+        return DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
+    public function updateActivityTimestamps(string $tenantId, string $leadId, array $timestamps): void
+    {
+        $allowed = ['last_inbound_at', 'last_outbound_at', 'last_activity_at'];
+        $updates = array_intersect_key($timestamps, array_flip($allowed));
+
+        if (!$updates) {
+            return;
+        }
+
+        DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $leadId)
+            ->whereNull('deleted_at')
+            ->update($updates);
+
+        $this->bustCache($tenantId);
+    }
 }

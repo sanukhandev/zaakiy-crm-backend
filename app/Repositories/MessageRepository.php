@@ -7,63 +7,40 @@ use Illuminate\Support\Str;
 
 class MessageRepository
 {
-    public function createInbound(array $payload): string
-    {
-        $id = (string) Str::uuid();
+    public function create(
+        string $tenantId,
+        string $leadId,
+        string $channel,
+        string $direction,
+        string $content,
+        ?string $externalId = null,
+        ?string $createdBy = null,
+    ): object {
+        $id = Str::uuid();
+        $now = now();
 
         DB::table('messages')->insert([
             'id' => $id,
-            'tenant_id' => $payload['tenant_id'],
-            'lead_id' => null,
-            'channel' => 'whatsapp',
-            'sender' => $payload['phone'],
-            'content' => $payload['message'],
-            'direction' => $payload['direction'] ?? 'inbound',
-            'external_id' => $payload['external_id'] ?? null,
-            'created_at' => now(),
+            'tenant_id' => $tenantId,
+            'lead_id' => $leadId,
+            'channel' => $channel,
+            'direction' => $direction,
+            'content' => $content,
+            'external_id' => $externalId,
+            'created_by' => $createdBy,
+            'created_at' => $now,
+            'updated_at' => $now,
         ]);
 
-        return $id;
+        return $this->findById($tenantId, $id);
     }
 
-    public function createOutbound(array $payload): string
-    {
-        $id = (string) Str::uuid();
-
-        DB::table('messages')->insert([
-            'id' => $id,
-            'tenant_id' => $payload['tenant_id'],
-            'lead_id' => $payload['lead_id'],
-            'channel' => 'whatsapp',
-            'sender' => $payload['sender'] ?? 'crm',
-            'content' => $payload['message'],
-            'direction' => 'outbound',
-            'external_id' => $payload['external_id'] ?? null,
-            'created_at' => now(),
-        ]);
-
-        return $id;
-    }
-
-    public function linkLead(string $messageId, string $tenantId, string $leadId): void
-    {
-        DB::table('messages')
-            ->where('id', $messageId)
-            ->where('tenant_id', $tenantId)
-            ->update([
-                'lead_id' => $leadId,
-            ]);
-    }
-
-    public function getForLead(string $leadId, string $tenantId, int $perPage = 50): array
+    public function findById(string $tenantId, string $id): ?object
     {
         return DB::table('messages')
-            ->where('lead_id', $leadId)
             ->where('tenant_id', $tenantId)
-            ->orderBy('created_at', 'asc')
-            ->limit($perPage)
-            ->get()
-            ->all();
+            ->where('id', $id)
+            ->first();
     }
 
     public function findByExternalId(string $tenantId, string $externalId): ?object
@@ -74,12 +51,42 @@ class MessageRepository
             ->first();
     }
 
-    public function countForLeadByDirection(string $leadId, string $tenantId, string $direction): int
+    public function findByLeadId(string $tenantId, string $leadId, int $limit = 50, int $offset = 0): array
+    {
+        return DB::table('messages')
+            ->where('tenant_id', $tenantId)
+            ->where('lead_id', $leadId)
+            ->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->offset($offset)
+            ->get()
+            ->toArray();
+    }
+
+    public function countByLeadId(string $tenantId, string $leadId): int
     {
         return (int) DB::table('messages')
-            ->where('lead_id', $leadId)
             ->where('tenant_id', $tenantId)
-            ->where('direction', $direction)
+            ->where('lead_id', $leadId)
+            ->count();
+    }
+
+    public function findLastInboundByLeadId(string $tenantId, string $leadId): ?object
+    {
+        return DB::table('messages')
+            ->where('tenant_id', $tenantId)
+            ->where('lead_id', $leadId)
+            ->where('direction', 'inbound')
+            ->orderBy('created_at', 'desc')
+            ->first();
+    }
+
+    public function countInboundByLeadId(string $tenantId, string $leadId): int
+    {
+        return (int) DB::table('messages')
+            ->where('tenant_id', $tenantId)
+            ->where('lead_id', $leadId)
+            ->where('direction', 'inbound')
             ->count();
     }
 }

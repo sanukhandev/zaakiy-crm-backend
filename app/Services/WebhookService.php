@@ -15,6 +15,8 @@ class WebhookService
         protected WhatsAppNormalizer $whatsAppNormalizer,
         protected LeadService $leadService,
         protected WhatsAppService $whatsAppService,
+        protected LeadActivityService $leadActivityService,
+        protected MessageService $messageService,
     ) {}
 
     public function ingestMeta(Request $request): array
