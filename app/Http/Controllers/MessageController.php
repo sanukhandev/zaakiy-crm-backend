@@ -68,7 +68,7 @@ class MessageController extends Controller
         }
 
         return response()->json([
-            'data' => $messages,
+            'data' => $messages['data'] ?? [],
             'count' => count($messages['data'] ?? []),
             'meta' => [
                 'current_page' => $messages['current_page'] ?? 1,
