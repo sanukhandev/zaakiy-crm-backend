@@ -13,24 +13,18 @@ use RuntimeException;
 class WhatsAppService
 {
     public function __construct(
+        protected MessageService $messageService,
         protected MessageRepository $messageRepository,
         protected LeadRepository $leadRepository,
         protected LeadService $leadService,
         protected TenantWhatsAppIntegrationService $tenantWhatsAppIntegrationService,
         protected LeadAutomationStateService $leadAutomationStateService,
+        protected LeadActivityService $leadActivityService,
     ) {}
 
     public function ingestInbound(string $tenantId, array $payload): array
     {
         $result = DB::transaction(function () use ($tenantId, $payload) {
-            $messageId = $this->messageRepository->createInbound([
-                'tenant_id' => $tenantId,
-                'phone' => $payload['phone'],
-                'message' => $payload['message'],
-                'direction' => $payload['direction'] ?? 'inbound',
-                'external_id' => $payload['external_id'] ?? null,
-            ]);
-
             $lead = $this->leadRepository->findByPhone($tenantId, $payload['phone']);
 
             if (!$lead) {
@@ -45,29 +39,35 @@ class WhatsAppService
                 $lead = $this->leadRepository->findByIdForTenant($created['id'], $tenantId);
             }
 
-            $this->messageRepository->linkLead($messageId, $tenantId, $lead->id);
+            $message = $this->messageService->createInboundMessage(
+                $tenantId,
+                (string) $lead->id,
+                'whatsapp',
+                (string) $payload['message'],
+                $payload['external_id'] ?? null,
+                $payload['metadata'] ?? null,
+            );
 
-            $this->leadRepository->addActivity($lead->id, [
-                'tenant_id' => $tenantId,
-                'user_id' => null,
-            ], [
-                'type' => 'whatsapp',
-                'content' => $payload['message'],
-            ]);
+            $this->leadActivityService->logInboundMessage(
+                $tenantId,
+                (string) $lead->id,
+                (string) $payload['message'],
+                null,
+            );
 
             $this->leadRepository->updateAutomationState($lead->id, $tenantId, [
                 'last_inbound_at' => now(),
             ]);
 
             return [
-                'message_id' => $messageId,
+                'message_id' => $message->id,
                 'lead_id' => $lead->id,
             ];
         });
 
         $lead = $this->leadRepository->findByIdForTenant($result['lead_id'], $tenantId);
         if ($lead) {
-            $inboundCount = $this->messageRepository->countForLeadByDirection($lead->id, $tenantId, 'inbound');
+            $inboundCount = $this->messageService->countInboundMessages($tenantId, (string) $lead->id);
 
             if ($this->leadAutomationStateService->shouldAutoReply($tenantId, $lead, $inboundCount)) {
                 $template = $this->leadAutomationStateService->getAutoReplyTemplate($tenantId);
@@ -126,13 +126,16 @@ class WhatsAppService
         }
 
         return DB::transaction(function () use ($auth, $leadId, $content, $externalId, $senderLabel, $isAutomated) {
-            $messageId = $this->messageRepository->createOutbound([
-                'tenant_id' => $auth['tenant_id'],
-                'lead_id' => $leadId,
-                'sender' => $senderLabel,
-                'message' => $content,
-                'external_id' => $externalId,
-            ]);
+            $message = $this->messageService->createOutboundMessage(
+                (string) $auth['tenant_id'],
+                $leadId,
+                'whatsapp',
+                $content,
+                $externalId,
+                ['sender' => $senderLabel],
+                $auth['user_id'] ?? null,
+                'sent',
+            );
 
             $this->leadRepository->addActivity($leadId, $auth, [
                 'type' => $isAutomated ? 'auto_reply' : 'whatsapp',
@@ -152,14 +155,14 @@ class WhatsAppService
             Log::info('WhatsApp outbound message sent', [
                 'tenant_id' => $auth['tenant_id'],
                 'lead_id' => $leadId,
-                'message_id' => $messageId,
+                'message_id' => $message->id,
                 'external_id' => $externalId,
                 'user_id' => $auth['user_id'] ?? null,
                 'is_automated' => $isAutomated,
             ]);
 
             return [
-                'id' => $messageId,
+                'id' => $message->id,
                 'tenant_id' => $auth['tenant_id'],
                 'channel' => 'whatsapp',
                 'sender' => $senderLabel,

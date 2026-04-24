@@ -17,6 +17,7 @@ class UpdateMessageStatusJob implements ShouldQueue
         protected string $tenantId,
         protected string $externalId,
         protected string $status,
+        protected ?array $payload = null,
     ) {}
 
     public function handle(MessageRepository $repository): void
@@ -35,7 +36,8 @@ class UpdateMessageStatusJob implements ShouldQueue
         $updated = $repository->updateStatusByExternalId(
             $this->tenantId,
             $this->externalId,
-            $this->status
+            $this->status,
+            $this->payload,
         );
 
         if ($updated) {

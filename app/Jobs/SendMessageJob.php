@@ -5,21 +5,26 @@ namespace App\Jobs;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use App\Repositories\MessageRepository;
+use App\Services\LeadActivityService;
 use Illuminate\Support\Facades\Log;
 
 class SendMessageJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 3;
-    public int $backoff = 60;
+    public int $tries = 5;
 
     public function __construct(
         protected string $messageId,
         protected string $tenantId,
     ) {}
 
-    public function handle(MessageRepository $repository): void
+    public function backoff(): array
+    {
+        return [5, 15, 30, 60, 120];
+    }
+
+    public function handle(MessageRepository $repository, LeadActivityService $activityService): void
     {
         $message = $repository->findById($this->tenantId, $this->messageId);
 
@@ -41,7 +46,7 @@ class SendMessageJob implements ShouldQueue
             );
 
             if ($response['success']) {
-                $repository->updateStatus($this->tenantId, $this->messageId, 'sent');
+                $repository->updateMessageStatus($this->tenantId, $this->messageId, 'sent', $response);
                 Log::info('Message sent successfully', [
                     'message_id' => $this->messageId,
                     'channel' => $message->channel,
@@ -57,7 +62,20 @@ class SendMessageJob implements ShouldQueue
             ]);
 
             if ($this->attempts() >= $this->tries) {
-                $repository->updateStatus($this->tenantId, $this->messageId, 'failed');
+                $repository->updateMessageStatus($this->tenantId, $this->messageId, 'failed', [
+                    'error' => $e->getMessage(),
+                    'attempt' => $this->attempts(),
+                ]);
+
+                $activityService->logOutboundMessage(
+                    (string) $message->lead_id,
+                    $this->tenantId,
+                    $this->messageId,
+                    (string) $message->channel,
+                    '[FAILED] ' . (string) $message->content,
+                    null,
+                );
+
                 $this->fail($e);
             } else {
                 throw $e; // Retry

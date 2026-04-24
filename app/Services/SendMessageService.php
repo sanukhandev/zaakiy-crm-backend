@@ -3,17 +3,16 @@
 namespace App\Services;
 
 use App\DTOs\SendMessageDTO;
-use App\Repositories\MessageRepository;
 use App\Repositories\LeadRepository;
 use App\Jobs\SendMessageJob;
-use Illuminate\Support\Facades\DB;
 
 class SendMessageService
 {
     public function __construct(
-        protected MessageRepository $messageRepository,
+        protected MessageService $messageService,
         protected LeadRepository $leadRepository,
         protected LeadActivityService $activityService,
+        protected InboxService $inboxService,
     ) {}
 
     public function send(SendMessageDTO $dto): object
@@ -24,30 +23,27 @@ class SendMessageService
             throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Lead not found');
         }
 
+        $senderUserId = (string) ($dto->createdBy ?? 'system');
+        $this->inboxService->assertCanSend($dto->tenantId, $dto->leadId, $senderUserId);
+
         // Prevent duplicate sends (idempotency)
         if ($dto->externalId) {
-            $existing = $this->messageRepository->findByExternalId($dto->tenantId, $dto->externalId);
+            $existing = $this->messageService->findByExternalId($dto->tenantId, $dto->externalId);
             if ($existing) {
                 return $existing;
             }
         }
 
-        // Create outbound message record
-        $message = $this->messageRepository->create(
+        $message = $this->messageService->createOutboundMessage(
             $dto->tenantId,
             $dto->leadId,
             $dto->channel,
             'outbound',
             $dto->content,
+            null,
             $dto->externalId,
+            'sent',
             $dto->createdBy,
-        );
-
-        // Update lead conversation metadata
-        $this->leadRepository->updateConversationMetadata(
-            $dto->tenantId,
-            $dto->leadId,
-            'outbound'
         );
 
         // Log activity

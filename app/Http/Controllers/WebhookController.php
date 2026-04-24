@@ -53,11 +53,14 @@ class WebhookController extends Controller
     {
         try {
             $payload = $request->json()->all();
-            $payload['tenant_id'] = $request->attributes->get('auth')['tenant_id'] ?? $payload['tenant_id'];
+            $auth = $request->attributes->get('auth');
+            if (is_array($auth) && !empty($auth['tenant_id'])) {
+                $payload['tenant_id'] = $auth['tenant_id'];
+            }
 
             $dto = MessageStatusUpdateDTO::fromWebhook($payload);
 
-            dispatch(new UpdateMessageStatusJob($dto->tenantId, $dto->externalId, $dto->status));
+            dispatch(new UpdateMessageStatusJob($dto->tenantId, $dto->externalId, $dto->status, $dto->payload));
 
             return $this->success(['queued' => true], 'Status update queued', [], 202);
         } catch (\InvalidArgumentException $e) {
@@ -73,11 +76,14 @@ class WebhookController extends Controller
     {
         try {
             $payload = $request->json()->all();
-            $payload['tenant_id'] = $request->attributes->get('auth')['tenant_id'] ?? $payload['tenant_id'];
+            $auth = $request->attributes->get('auth');
+            if (is_array($auth) && !empty($auth['tenant_id'])) {
+                $payload['tenant_id'] = $auth['tenant_id'];
+            }
 
             $dto = MessageStatusUpdateDTO::fromWebhook($payload);
 
-            dispatch(new UpdateMessageStatusJob($dto->tenantId, $dto->externalId, $dto->status));
+            dispatch(new UpdateMessageStatusJob($dto->tenantId, $dto->externalId, $dto->status, $dto->payload));
 
             return $this->success(['queued' => true], 'Status update queued', [], 202);
         } catch (\InvalidArgumentException $e) {

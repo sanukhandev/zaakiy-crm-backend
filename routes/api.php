@@ -86,6 +86,9 @@ Route::prefix('v1')->group(function () {
             ->middleware('throttle:lead-write');
 
         Route::get('/inbox', [MessageController::class, 'getInbox']);
+        Route::post('/inbox/{leadId}/claim', [MessageController::class, 'claim'])->middleware('throttle:lead-write');
+        Route::post('/inbox/{leadId}/release', [MessageController::class, 'release'])->middleware('throttle:lead-write');
+        Route::post('/inbox/{leadId}/read', [MessageController::class, 'markInboxRead'])->middleware('throttle:lead-write');
         Route::post('/messages/send', [MessageController::class, 'send'])->middleware('throttle:lead-write');
         Route::get('/messages', [MessageController::class, 'getMessages']);
         Route::post('/messages/read/{lead_id}', [MessageController::class, 'markAsRead']);

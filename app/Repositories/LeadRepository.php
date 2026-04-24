@@ -858,6 +858,15 @@ class LeadRepository
         $this->bustCache($tenantId);
     }
 
+    public function updateLeadConversationMetadata(
+        string $tenantId,
+        string $leadId,
+        string $lastMessageDirection,
+        ?int $unreadCount = null
+    ): void {
+        $this->updateConversationMetadata($tenantId, $leadId, $lastMessageDirection, $unreadCount);
+    }
+
     public function incrementUnreadCount(string $tenantId, string $leadId): void
     {
         DB::table('leads')
@@ -881,5 +890,91 @@ class LeadRepository
             ]);
 
         $this->bustCache($tenantId);
+    }
+
+    public function claimConversation(string $tenantId, string $leadId, string $userId, int $lockSeconds = 300): ?object
+    {
+        return DB::transaction(function () use ($tenantId, $leadId, $userId, $lockSeconds) {
+            $lead = DB::table('leads')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $leadId)
+                ->whereNull('deleted_at')
+                ->lockForUpdate()
+                ->first();
+
+            if (!$lead) {
+                return null;
+            }
+
+            $isExpired = empty($lead->conversation_lock_expires_at)
+                || now()->greaterThan($lead->conversation_lock_expires_at);
+            $isSameOwner = !empty($lead->conversation_owner_id) && (string) $lead->conversation_owner_id === $userId;
+            $isUnowned = empty($lead->conversation_owner_id);
+
+            if (!($isUnowned || $isExpired || $isSameOwner)) {
+                return $lead;
+            }
+
+            DB::table('leads')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $leadId)
+                ->update([
+                    'conversation_owner_id' => $userId,
+                    'conversation_owner_at' => now(),
+                    'conversation_lock_expires_at' => now()->addSeconds($lockSeconds),
+                    'updated_at' => now(),
+                ]);
+
+            $this->bustCache($tenantId);
+
+            return DB::table('leads')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $leadId)
+                ->whereNull('deleted_at')
+                ->first();
+        });
+    }
+
+    public function releaseConversation(string $tenantId, string $leadId): bool
+    {
+        $updated = DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $leadId)
+            ->whereNull('deleted_at')
+            ->update([
+                'conversation_owner_id' => null,
+                'conversation_owner_at' => null,
+                'conversation_lock_expires_at' => null,
+                'updated_at' => now(),
+            ]);
+
+        if ($updated) {
+            $this->bustCache($tenantId);
+        }
+
+        return (bool) $updated;
+    }
+
+    public function canUserSendInConversation(string $tenantId, string $leadId, string $userId): bool
+    {
+        $lead = DB::table('leads')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $leadId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$lead) {
+            return false;
+        }
+
+        if (empty($lead->conversation_owner_id) || empty($lead->conversation_lock_expires_at)) {
+            return true;
+        }
+
+        if (now()->greaterThan($lead->conversation_lock_expires_at)) {
+            return true;
+        }
+
+        return (string) $lead->conversation_owner_id === $userId;
     }
 }

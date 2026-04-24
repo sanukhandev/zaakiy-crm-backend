@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Repositories\MessageRepository;
+use App\Repositories\LeadRepository;
 
 class MessageService
 {
     public function __construct(
         protected MessageRepository $repository,
+        protected LeadRepository $leadRepository,
     ) {}
 
     public function createInboundMessage(
@@ -16,15 +18,14 @@ class MessageService
         string $channel,
         string $content,
         ?string $externalId = null,
+        ?array $metadata = null,
     ): object {
-        return $this->repository->create(
-            $tenantId,
-            $leadId,
-            $channel,
-            'inbound',
-            $content,
-            $externalId,
-        );
+        $message = $this->repository->createInboundMessage($tenantId, $leadId, $channel, $content, $externalId, $metadata);
+
+        $this->leadRepository->incrementUnreadCount($tenantId, $leadId);
+        $this->leadRepository->updateLeadConversationMetadata($tenantId, $leadId, 'inbound');
+
+        return $message;
     }
 
     public function createOutboundMessage(
@@ -33,22 +34,29 @@ class MessageService
         string $channel,
         string $content,
         ?string $externalId = null,
+        ?array $metadata = null,
         ?string $createdBy = null,
+        string $status = 'sent',
     ): object {
-        return $this->repository->create(
+        $message = $this->repository->createOutboundMessage(
             $tenantId,
             $leadId,
             $channel,
-            'outbound',
             $content,
             $externalId,
+            $metadata,
             $createdBy,
+            $status,
         );
+
+        $this->leadRepository->updateLeadConversationMetadata($tenantId, $leadId, 'outbound');
+
+        return $message;
     }
 
-    public function getLeadMessages(string $tenantId, string $leadId, int $limit = 50, int $offset = 0): array
+    public function getLeadMessages(string $tenantId, string $leadId, int $perPage = 50, int $page = 1): array
     {
-        return $this->repository->findByLeadId($tenantId, $leadId, $limit, $offset);
+        return $this->repository->getConversationMessagesPaginated($tenantId, $leadId, $perPage, $page)->toArray();
     }
 
     public function countLeadMessages(string $tenantId, string $leadId): int
@@ -73,12 +81,12 @@ class MessageService
 
     public function updateMessageStatus(string $tenantId, string $messageId, string $status): bool
     {
-        return $this->repository->updateStatus($tenantId, $messageId, $status);
+        return $this->repository->updateMessageStatus($tenantId, $messageId, $status);
     }
 
-    public function updateMessageStatusByExternalId(string $tenantId, string $externalId, string $status): bool
+    public function updateMessageStatusByExternalId(string $tenantId, string $externalId, string $status, ?array $payload = null): bool
     {
-        return $this->repository->updateStatusByExternalId($tenantId, $externalId, $status);
+        return $this->repository->updateStatusByExternalId($tenantId, $externalId, $status, $payload);
     }
 
     public function getInbox(
@@ -86,14 +94,24 @@ class MessageService
         ?string $assignedTo = null,
         bool $unreadOnly = false,
         bool $needsFollowUp = false,
-        int $limit = 50,
-        int $offset = 0
+        bool $ownedByMe = false,
+        ?string $ownerId = null,
+        int $perPage = 20,
+        int $page = 1,
     ): array {
-        return $this->repository->getInboxMessages($tenantId, $assignedTo, $unreadOnly, $needsFollowUp, $limit, $offset);
+        return $this->repository
+            ->getInboxMessagesPaginated($tenantId, $assignedTo, $unreadOnly, $needsFollowUp, $ownedByMe, $ownerId, $perPage, $page)
+            ->toArray();
     }
 
-    public function getConversation(string $tenantId, string $leadId, int $limit = 100): array
+    public function getConversation(string $tenantId, string $leadId, int $perPage = 50, int $page = 1): array
     {
-        return $this->repository->getConversationMessages($tenantId, $leadId, $limit);
+        return $this->repository->getConversationMessagesPaginated($tenantId, $leadId, $perPage, $page)->toArray();
+    }
+
+    public function markLeadMessagesAsRead(string $tenantId, string $leadId): void
+    {
+        $this->repository->markLeadMessagesAsRead($tenantId, $leadId);
+        $this->leadRepository->resetUnreadCount($tenantId, $leadId);
     }
 }
