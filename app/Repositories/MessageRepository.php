@@ -3,7 +3,6 @@
 namespace App\Repositories;
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class MessageRepository
@@ -54,11 +53,6 @@ class MessageRepository
 
     public function findByLeadId(string $tenantId, string $leadId, int $limit = 50, int $offset = 0): array
     {
-        // Return empty array if table doesn't exist
-        if (!Schema::hasTable('messages')) {
-            return [];
-        }
-
         return DB::table('messages')
             ->where('tenant_id', $tenantId)
             ->where('lead_id', $leadId)
@@ -71,10 +65,6 @@ class MessageRepository
 
     public function countByLeadId(string $tenantId, string $leadId): int
     {
-        if (!Schema::hasTable('messages')) {
-            return 0;
-        }
-
         return (int) DB::table('messages')
             ->where('tenant_id', $tenantId)
             ->where('lead_id', $leadId)
@@ -83,10 +73,6 @@ class MessageRepository
 
     public function findLastInboundByLeadId(string $tenantId, string $leadId): ?object
     {
-        if (!Schema::hasTable('messages')) {
-            return null;
-        }
-
         return DB::table('messages')
             ->where('tenant_id', $tenantId)
             ->where('lead_id', $leadId)
@@ -97,10 +83,6 @@ class MessageRepository
 
     public function countInboundByLeadId(string $tenantId, string $leadId): int
     {
-        if (!Schema::hasTable('messages')) {
-            return 0;
-        }
-
         return (int) DB::table('messages')
             ->where('tenant_id', $tenantId)
             ->where('lead_id', $leadId)

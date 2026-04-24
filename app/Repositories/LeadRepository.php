@@ -572,7 +572,7 @@ class LeadRepository
 
         $id = (string) Str::uuid();
 
-        DB::table('lead_activity_logs')->insert([
+        DB::table('lead_activities')->insert([
             'id' => $id,
             'lead_id' => $leadId,
             'tenant_id' => $auth['tenant_id'],
@@ -603,16 +603,11 @@ class LeadRepository
     // Ensure lead belongs to tenant
     $this->ensureLeadExistsForTenant($leadId, $tenantId);
 
-    // Return empty paginated result if table doesn't exist
-    if (!Schema::hasTable('lead_activity_logs')) {
-        return new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, 1);
-    }
-
-    $query = DB::table('lead_activity_logs')
+    $query = DB::table('lead_activities')
         ->where('lead_id', $leadId);
 
     // ✅ Apply tenant filter ONLY if column exists
-    if (Schema::hasColumn('lead_activity_logs', 'tenant_id')) {
+    if (Schema::hasColumn('lead_activities', 'tenant_id')) {
         $query->where('tenant_id', $tenantId);
     }
 

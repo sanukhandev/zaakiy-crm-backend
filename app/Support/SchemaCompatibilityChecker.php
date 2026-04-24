@@ -51,7 +51,7 @@ class SchemaCompatibilityChecker
                 'changed_by',
                 'created_at',
             ],
-            'lead_activity_logs' => [
+            'lead_activities' => [
                 'id',
                 'lead_id',
                 'tenant_id',
@@ -110,8 +110,8 @@ class SchemaCompatibilityChecker
         );
 
         $this->checkForeignKey(
-            'lead_activity_logs',
-            'lead_activity_logs_lead_id_foreign',
+            'lead_activities',
+            'lead_activities_lead_id_foreign',
             $warnings,
         );
 
