@@ -603,6 +603,11 @@ class LeadRepository
     // Ensure lead belongs to tenant
     $this->ensureLeadExistsForTenant($leadId, $tenantId);
 
+    // Return empty paginated result if table doesn't exist
+    if (!Schema::hasTable('lead_activity_logs')) {
+        return new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, 1);
+    }
+
     $query = DB::table('lead_activity_logs')
         ->where('lead_id', $leadId);
 
