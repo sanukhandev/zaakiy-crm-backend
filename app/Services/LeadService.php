@@ -143,7 +143,7 @@ class LeadService
             throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Lead not found');
         }
 
-        return $this->messageRepository->getForLead($leadId, $auth['tenant_id'], $perPage);
+        return $this->messageRepository->findByLeadId($auth['tenant_id'], $leadId, $perPage);
     }
 
     public function listLeads(array $auth, array $params)
