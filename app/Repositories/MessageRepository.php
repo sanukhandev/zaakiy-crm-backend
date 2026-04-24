@@ -270,7 +270,7 @@ class MessageRepository
         return DB::table('messages')
             ->where('tenant_id', $tenantId)
             ->where('lead_id', $leadId)
-            ->orderBy('created_at', 'asc')
+            ->orderBy('created_at', 'desc')
             ->paginate(min($perPage, 100), ['*'], 'page', max($page, 1));
     }
 
@@ -316,6 +316,7 @@ class MessageRepository
         }
 
         $allowed = [
+            'sending' => ['sent', 'failed'],
             'sent' => ['delivered', 'read', 'failed'],
             'delivered' => ['read'],
             'read' => [],

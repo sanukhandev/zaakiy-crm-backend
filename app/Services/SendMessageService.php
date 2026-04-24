@@ -42,7 +42,7 @@ class SendMessageService
             $dto->externalId,
             $dto->metadata,
             $dto->createdBy,
-            'sent',
+            'sending',
             $senderUserId,
         );
 
