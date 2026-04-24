@@ -18,6 +18,7 @@ class LeadService
         protected UserAssignmentRepository $userAssignmentRepository,
         protected AssignmentStrategyService $assignmentStrategyService,
         protected LeadAutomationStateService $leadAutomationStateService,
+        protected LeadActivityService $leadActivityService,
     ) {}
 
     private function adjustAssignmentLoad(string $tenantId, ?string $previousUserId, ?string $nextUserId, int $count = 1): void
@@ -79,7 +80,7 @@ class LeadService
             : $this->assignmentStrategyService->resolveUserId($tenantId);
         $stageId = $payload['stage_id'] ?? $this->pipelineRepository->getFirstStageId($tenantId);
 
-        $id = DB::transaction(function () use ($tenantId, $payload, $assignedTo, $stageId) {
+        $id = DB::transaction(function () use ($tenantId, $payload, $assignedTo, $stageId, $auth) {
             $leadId = $this->leadRepo->create([
                 'tenant_id' => $tenantId,
                 'name' => $payload['name'],
@@ -94,6 +95,23 @@ class LeadService
 
             if ($assignedTo) {
                 $this->userAssignmentRepository->incrementCurrentLoad($tenantId, $assignedTo);
+            }
+
+            $this->leadActivityService->logLeadCreated(
+                $tenantId,
+                $leadId,
+                (string) ($payload['source'] ?? 'manual'),
+                $auth['user_id'] ?? null,
+            );
+
+            if ($assignedTo) {
+                $this->leadActivityService->logAssignment(
+                    $tenantId,
+                    $leadId,
+                    $assignedTo,
+                    null,
+                    $auth['user_id'] ?? null,
+                );
             }
 
             return $leadId;
@@ -120,6 +138,16 @@ class LeadService
 
         if (($result['action'] ?? null) === 'created' && $assignedTo) {
             $this->userAssignmentRepository->incrementCurrentLoad($tenantId, $assignedTo);
+        }
+
+        if (($result['action'] ?? null) === 'created') {
+            $this->leadActivityService->logLeadCreated($tenantId, $result['id'], (string) ($payload['source'] ?? 'webhook'));
+
+            if ($assignedTo) {
+                $this->leadActivityService->logAssignment($tenantId, $result['id'], $assignedTo);
+            }
+        } elseif (($result['action'] ?? null) === 'updated') {
+            $this->leadActivityService->logLeadUpdated($tenantId, $result['id'], (string) ($payload['source'] ?? 'webhook'));
         }
 
         $this->pipelineRepository->forgetCache($tenantId);
@@ -170,10 +198,28 @@ class LeadService
         $result = $this->leadRepo->update($id, $auth, $payload);
 
         if (array_key_exists('assigned_to', $payload)) {
+            $this->leadActivityService->logAssignment(
+                $auth['tenant_id'],
+                $id,
+                (string) ($payload['assigned_to'] ?? 'unassigned'),
+                $existingLead->assigned_to,
+                $auth['user_id'] ?? null,
+            );
+
             $this->adjustAssignmentLoad(
                 $auth['tenant_id'],
                 $existingLead->assigned_to,
                 $payload['assigned_to'],
+            );
+        }
+
+        if (array_key_exists('status', $payload) && $payload['status'] !== $existingLead->status) {
+            $this->leadActivityService->logStatusChange(
+                $auth['tenant_id'],
+                $id,
+                $payload['status'],
+                $existingLead->status,
+                $auth['user_id'] ?? null,
             );
         }
 

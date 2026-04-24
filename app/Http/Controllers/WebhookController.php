@@ -24,13 +24,32 @@ class WebhookController extends Controller
         try {
             $result = $this->webhookService->ingestMeta($request);
 
-            return $this->success($result, 'Webhook processed', [], 202);
+            return $this->success($result, 'Webhook queued', [], 202);
         } catch (\InvalidArgumentException $e) {
-            return $this->failure($e->getMessage(), null, [], 400);
-        } catch (\Throwable $e) {
-            return $this->failure('Failed to process webhook', null, [
+            return $this->failure($e->getMessage(), null, [], 400, [
                 'webhook' => [$e->getMessage()],
-            ], 500);
+            ]);
+        } catch (\Throwable $e) {
+            return $this->failure('Failed to process webhook', null, [], 500, [
+                'webhook' => [$e->getMessage()],
+            ]);
+        }
+    }
+
+    public function tiktok(Request $request): JsonResponse
+    {
+        try {
+            $result = $this->webhookService->ingestTikTok($request);
+
+            return $this->success($result, 'TikTok webhook queued', [], 202);
+        } catch (\InvalidArgumentException $e) {
+            return $this->failure($e->getMessage(), null, [], 400, [
+                'webhook' => [$e->getMessage()],
+            ]);
+        } catch (\Throwable $e) {
+            return $this->failure('Failed to process webhook', null, [], 500, [
+                'webhook' => [$e->getMessage()],
+            ]);
         }
     }
 
@@ -39,13 +58,15 @@ class WebhookController extends Controller
         try {
             $result = $this->webhookService->ingestWhatsApp($request);
 
-            return $this->success($result, 'WhatsApp webhook processed', [], 202);
+            return $this->success($result, 'WhatsApp webhook queued', [], 202);
         } catch (\InvalidArgumentException $e) {
-            return $this->failure($e->getMessage(), null, [], 400);
-        } catch (\Throwable $e) {
-            return $this->failure('Failed to process webhook', null, [
+            return $this->failure($e->getMessage(), null, [], 400, [
                 'webhook' => [$e->getMessage()],
-            ], 500);
+            ]);
+        } catch (\Throwable $e) {
+            return $this->failure('Failed to process webhook', null, [], 500, [
+                'webhook' => [$e->getMessage()],
+            ]);
         }
     }
 

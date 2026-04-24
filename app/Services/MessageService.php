@@ -19,11 +19,25 @@ class MessageService
         string $content,
         ?string $externalId = null,
         ?array $metadata = null,
+        ?string $sender = null,
     ): object {
-        $message = $this->repository->createInboundMessage($tenantId, $leadId, $channel, $content, $externalId, $metadata);
+        $message = $this->repository->createInboundMessage(
+            $tenantId,
+            $leadId,
+            $channel,
+            $content,
+            $externalId,
+            $metadata,
+            null,
+            $sender,
+        );
 
         $this->leadRepository->incrementUnreadCount($tenantId, $leadId);
         $this->leadRepository->updateLeadConversationMetadata($tenantId, $leadId, 'inbound');
+        $this->leadRepository->updateActivityTimestamps($tenantId, $leadId, [
+            'last_inbound_at' => now(),
+            'last_activity_at' => now(),
+        ]);
 
         return $message;
     }
@@ -37,6 +51,7 @@ class MessageService
         ?array $metadata = null,
         ?string $createdBy = null,
         string $status = 'sent',
+        ?string $sender = null,
     ): object {
         $message = $this->repository->createOutboundMessage(
             $tenantId,
@@ -47,9 +62,14 @@ class MessageService
             $metadata,
             $createdBy,
             $status,
+            $sender,
         );
 
         $this->leadRepository->updateLeadConversationMetadata($tenantId, $leadId, 'outbound');
+        $this->leadRepository->updateActivityTimestamps($tenantId, $leadId, [
+            'last_outbound_at' => now(),
+            'last_activity_at' => now(),
+        ]);
 
         return $message;
     }

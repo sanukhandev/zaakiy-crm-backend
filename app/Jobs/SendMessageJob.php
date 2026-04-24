@@ -49,6 +49,7 @@ class SendMessageJob implements ShouldQueue
                 $repository->updateMessageStatus($this->tenantId, $this->messageId, 'sent', $response);
                 Log::info('Message sent successfully', [
                     'message_id' => $this->messageId,
+                    'tenant_id' => $this->tenantId,
                     'channel' => $message->channel,
                 ]);
             } else {
@@ -57,6 +58,7 @@ class SendMessageJob implements ShouldQueue
         } catch (\Throwable $e) {
             Log::error('Message send failed', [
                 'message_id' => $this->messageId,
+                'tenant_id' => $this->tenantId,
                 'error' => $e->getMessage(),
                 'attempt' => $this->attempts(),
             ]);

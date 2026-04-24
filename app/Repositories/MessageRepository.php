@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class MessageRepository
@@ -16,6 +17,7 @@ class MessageRepository
         ?string $externalId = null,
         ?array $metadata = null,
         ?string $createdBy = null,
+        ?string $sender = null,
     ): object {
         return $this->createMessage(
             tenantId: $tenantId,
@@ -26,6 +28,7 @@ class MessageRepository
             externalId: $externalId,
             metadata: $metadata,
             createdBy: $createdBy,
+            sender: $sender,
             defaultStatus: 'delivered'
         );
     }
@@ -39,6 +42,7 @@ class MessageRepository
         ?array $metadata = null,
         ?string $createdBy = null,
         string $status = 'sent',
+        ?string $sender = null,
     ): object {
         return $this->createMessage(
             tenantId: $tenantId,
@@ -49,6 +53,7 @@ class MessageRepository
             externalId: $externalId,
             metadata: $metadata,
             createdBy: $createdBy,
+            sender: $sender,
             defaultStatus: $status
         );
     }
@@ -62,6 +67,7 @@ class MessageRepository
         ?string $externalId,
         ?array $metadata,
         ?string $createdBy,
+        ?string $sender,
         string $defaultStatus,
     ): object {
         if ($externalId) {
@@ -74,7 +80,7 @@ class MessageRepository
         $id = Str::uuid();
         $now = now();
 
-        DB::table('messages')->insert([
+        $insert = [
             'id' => $id,
             'tenant_id' => $tenantId,
             'lead_id' => $leadId,
@@ -87,7 +93,13 @@ class MessageRepository
             'created_by' => $createdBy,
             'created_at' => $now,
             'updated_at' => $now,
-        ]);
+        ];
+
+        if (Schema::hasColumn('messages', 'sender')) {
+            $insert['sender'] = $sender;
+        }
+
+        DB::table('messages')->insert($insert);
 
         return $this->findById($tenantId, $id);
     }

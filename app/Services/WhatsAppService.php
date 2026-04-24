@@ -25,18 +25,22 @@ class WhatsAppService
     public function ingestInbound(string $tenantId, array $payload): array
     {
         $result = DB::transaction(function () use ($tenantId, $payload) {
-            $lead = $this->leadRepository->findByPhone($tenantId, $payload['phone']);
+            $lead = $this->leadRepository->findByPhoneOrEmailAndTenant(
+                $tenantId,
+                $payload['phone'] ?? null,
+                $payload['email'] ?? null,
+            );
 
             if (!$lead) {
                 $created = $this->leadService->createOrUpdateLeadFromWebhook($tenantId, [
-                    'name' => $payload['phone'],
-                    'phone' => $payload['phone'],
-                    'email' => null,
+                    'name' => $payload['name'] ?? ($payload['phone'] ?? 'WhatsApp lead'),
+                    'phone' => $payload['phone'] ?? null,
+                    'email' => $payload['email'] ?? null,
                     'source' => 'whatsapp',
                     'metadata' => $payload['metadata'] ?? [],
                 ]);
 
-                $lead = $this->leadRepository->findByIdForTenant($created['id'], $tenantId);
+                $lead = $this->leadRepository->findByIdForTenant((string) $created['id'], $tenantId);
             }
 
             $message = $this->messageService->createInboundMessage(
@@ -46,6 +50,7 @@ class WhatsAppService
                 (string) $payload['message'],
                 $payload['external_id'] ?? null,
                 $payload['metadata'] ?? null,
+                $payload['sender'] ?? ($payload['phone'] ?? null),
             );
 
             $this->leadActivityService->logInboundMessage(
@@ -64,28 +69,6 @@ class WhatsAppService
                 'lead_id' => $lead->id,
             ];
         });
-
-        $lead = $this->leadRepository->findByIdForTenant($result['lead_id'], $tenantId);
-        if ($lead) {
-            $inboundCount = $this->messageService->countInboundMessages($tenantId, (string) $lead->id);
-
-            if ($this->leadAutomationStateService->shouldAutoReply($tenantId, $lead, $inboundCount)) {
-                $template = $this->leadAutomationStateService->getAutoReplyTemplate($tenantId);
-
-                try {
-                    $this->sendOutbound([
-                        'tenant_id' => $tenantId,
-                        'user_id' => null,
-                    ], $lead->id, $template, true);
-                } catch (\Throwable $error) {
-                    Log::warning('WhatsApp auto reply failed', [
-                        'tenant_id' => $tenantId,
-                        'lead_id' => $lead->id,
-                        'error' => $error->getMessage(),
-                    ]);
-                }
-            }
-        }
 
         return $result;
     }
@@ -135,6 +118,7 @@ class WhatsAppService
                 ['sender' => $senderLabel],
                 $auth['user_id'] ?? null,
                 'sent',
+                $senderLabel,
             );
 
             $this->leadRepository->addActivity($leadId, $auth, [

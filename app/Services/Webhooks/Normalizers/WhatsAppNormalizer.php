@@ -3,6 +3,7 @@
 namespace App\Services\Webhooks\Normalizers;
 
 use App\DTOs\WebhookLeadPayload;
+use App\DTOs\WebhookMessagePayload;
 use App\Support\PhoneNumber;
 use InvalidArgumentException;
 
@@ -32,7 +33,7 @@ class WhatsAppNormalizer
         ], 'whatsapp');
     }
 
-    public function normalizeInboundMessage(array $payload): array
+    public function normalizeInboundMessage(array $payload): WebhookMessagePayload
     {
         $value = $payload['value']
             ?? $payload['entry'][0]['changes'][0]['value']
@@ -52,17 +53,20 @@ class WhatsAppNormalizer
             throw new InvalidArgumentException('Webhook message payload is invalid');
         }
 
-        return [
+        return WebhookMessagePayload::fromArray([
             'phone' => PhoneNumber::normalize((string) $phone),
             'message' => (string) $message,
-            'direction' => 'inbound',
             'external_id' => (string) (
                 $payload['external_id']
                 ?? $payload['message_id']
                 ?? $value['messages'][0]['id']
                 ?? ''
             ) ?: null,
+            'sender' => $payload['sender']
+                ?? $value['contacts'][0]['profile']['name']
+                ?? $phone,
+            'email' => $payload['email'] ?? null,
             'metadata' => $payload,
-        ];
+        ], 'whatsapp');
     }
 }

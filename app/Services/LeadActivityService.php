@@ -17,7 +17,7 @@ class LeadActivityService
             $tenantId,
             $leadId,
             'message_inbound',
-            json_encode(['message' => $content]),
+            'Incoming message: ' . trim($content),
             $createdBy,
         );
     }
@@ -34,21 +34,16 @@ class LeadActivityService
             $tenantId,
             $leadId,
             'message_outbound',
-            json_encode([
-                'message' => $content,
-                'channel' => $channel,
-                'message_id' => $messageId,
-            ]),
+            sprintf('Outgoing %s message: %s', $channel, trim($content)),
             $createdBy,
         );
     }
 
     public function logAssignment(string $tenantId, string $leadId, string $assignedToId, ?string $previousAssignedToId = null, ?string $createdBy = null): object
     {
-        $content = json_encode([
-            'assigned_to' => $assignedToId,
-            'previous_assigned_to' => $previousAssignedToId,
-        ]);
+        $content = $previousAssignedToId
+            ? sprintf('Assignment changed from %s to %s', $previousAssignedToId, $assignedToId)
+            : sprintf('Assigned to %s', $assignedToId);
 
         return $this->repository->create(
             $tenantId,
@@ -61,10 +56,9 @@ class LeadActivityService
 
     public function logStatusChange(string $tenantId, string $leadId, string $newStatus, ?string $previousStatus = null, ?string $createdBy = null): object
     {
-        $content = json_encode([
-            'new_status' => $newStatus,
-            'previous_status' => $previousStatus,
-        ]);
+        $content = $previousStatus
+            ? sprintf('Status changed from %s to %s', $previousStatus, $newStatus)
+            : sprintf('Status changed to %s', $newStatus);
 
         return $this->repository->create(
             $tenantId,
@@ -83,5 +77,27 @@ class LeadActivityService
     public function countLeadActivities(string $tenantId, string $leadId): int
     {
         return $this->repository->countByLeadId($tenantId, $leadId);
+    }
+
+    public function logLeadCreated(string $tenantId, string $leadId, string $source, ?string $createdBy = null): object
+    {
+        return $this->repository->create(
+            $tenantId,
+            $leadId,
+            'lead_created',
+            sprintf('Lead created from %s', $source),
+            $createdBy,
+        );
+    }
+
+    public function logLeadUpdated(string $tenantId, string $leadId, string $source, ?string $createdBy = null): object
+    {
+        return $this->repository->create(
+            $tenantId,
+            $leadId,
+            'lead_updated',
+            sprintf('Lead updated from %s ingestion', $source),
+            $createdBy,
+        );
     }
 }

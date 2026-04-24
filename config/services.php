@@ -43,9 +43,15 @@ return [
 
     'webhooks' => [
         'default_tenant_id' => env('WEBHOOK_DEFAULT_TENANT_ID'),
+        'allow_unsigned' => env('WEBHOOK_ALLOW_UNSIGNED', true),
         'api_key_map' => [
             env('WEBHOOK_META_API_KEY', '') => env('WEBHOOK_META_TENANT_ID', ''),
             env('WEBHOOK_WHATSAPP_API_KEY', '') => env('WEBHOOK_WHATSAPP_TENANT_ID', ''),
+        ],
+        'signatures' => [
+            'meta_secret' => env('WEBHOOK_META_SECRET'),
+            'whatsapp_secret' => env('WEBHOOK_WHATSAPP_SECRET'),
+            'tiktok_secret' => env('WEBHOOK_TIKTOK_SECRET'),
         ],
         'source_map' => [],
     ],

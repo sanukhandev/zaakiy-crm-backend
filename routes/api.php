@@ -19,6 +19,8 @@ Route::prefix('v1')->group(function () {
 
     Route::post('/webhooks/meta', [WebhookController::class, 'meta'])
         ->middleware('throttle:webhook-ingest');
+    Route::post('/webhooks/tiktok', [WebhookController::class, 'tiktok'])
+        ->middleware('throttle:webhook-ingest');
     Route::post('/webhooks/whatsapp', [WebhookController::class, 'whatsapp'])
         ->middleware('throttle:webhook-ingest');
     Route::post('/webhooks/whatsapp/status', [WebhookController::class, 'whatsappStatus'])
