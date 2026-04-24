@@ -7,6 +7,7 @@ use App\Http\Controllers\MessageController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\PipelineController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\AutomationRuleController;
 use App\Http\Controllers\TenantAutomationSettingsController;
 use App\Http\Controllers\TenantWhatsAppIntegrationController;
 use App\Http\Controllers\WebhookController;
@@ -61,6 +62,14 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('/analytics/overview', [AnalyticsController::class, 'overview']);
+
+        Route::get('/automation/rules', [AutomationRuleController::class, 'index']);
+        Route::post('/automation/rules', [AutomationRuleController::class, 'store'])
+            ->middleware('throttle:bulk-write');
+        Route::patch('/automation/rules/{id}', [AutomationRuleController::class, 'update'])
+            ->middleware('throttle:bulk-write');
+        Route::delete('/automation/rules/{id}', [AutomationRuleController::class, 'destroy'])
+            ->middleware('throttle:bulk-write');
 
         Route::get('/pipeline', [PipelineController::class, 'index']);
         Route::get('/pipelines', [PipelineController::class, 'index']);
