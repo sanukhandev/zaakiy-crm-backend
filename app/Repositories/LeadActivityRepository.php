@@ -12,7 +12,7 @@ class LeadActivityRepository
         $id = Str::uuid();
         $now = now();
 
-        DB::table('lead_activities')->insert([
+        DB::table('lead_activity_logs')->insert([
             'id' => $id,
             'tenant_id' => $tenantId,
             'lead_id' => $leadId,
@@ -28,7 +28,7 @@ class LeadActivityRepository
 
     public function findById(string $tenantId, string $id): ?object
     {
-        return DB::table('lead_activities')
+        return DB::table('lead_activity_logs')
             ->where('tenant_id', $tenantId)
             ->where('id', $id)
             ->first();
@@ -36,7 +36,7 @@ class LeadActivityRepository
 
     public function findByLeadId(string $tenantId, string $leadId, int $limit = 50, int $offset = 0): array
     {
-        return DB::table('lead_activities')
+        return DB::table('lead_activity_logs')
             ->where('tenant_id', $tenantId)
             ->where('lead_id', $leadId)
             ->orderBy('created_at', 'desc')
@@ -48,7 +48,7 @@ class LeadActivityRepository
 
     public function countByLeadId(string $tenantId, string $leadId): int
     {
-        return (int) DB::table('lead_activities')
+        return (int) DB::table('lead_activity_logs')
             ->where('tenant_id', $tenantId)
             ->where('lead_id', $leadId)
             ->count();
