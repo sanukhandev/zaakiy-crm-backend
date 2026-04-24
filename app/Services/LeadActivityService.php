@@ -100,4 +100,20 @@ class LeadActivityService
             $createdBy,
         );
     }
+
+    public function logStageChange(
+        string $tenantId,
+        string $leadId,
+        string $newStageName,
+        string $previousStageName,
+        ?string $createdBy = null,
+    ): object {
+        return $this->repository->create(
+            $tenantId,
+            $leadId,
+            'stage_changed',
+            sprintf('Moved from %s to %s', $previousStageName, $newStageName),
+            $createdBy,
+        );
+    }
 }

@@ -6,6 +6,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use App\Repositories\MessageRepository;
 use App\Services\LeadActivityService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class SendMessageJob implements ShouldQueue
@@ -37,6 +38,15 @@ class SendMessageJob implements ShouldQueue
         }
 
         try {
+            // Stamp each attempt attempt timestamp + increment retry counter
+            DB::table('messages')
+                ->where('id', $this->messageId)
+                ->where('tenant_id', $this->tenantId)
+                ->update([
+                    'last_attempt_at' => now(),
+                    'retry_count'     => DB::raw('COALESCE(retry_count, 0) + 1'),
+                ]);
+
             // Send via adapter based on channel
             $adapter = $this->getAdapterForChannel($message->channel);
             $response = $adapter->sendMessage(

@@ -6,6 +6,7 @@ use App\Http\Controllers\LeadController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\PipelineController;
+use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\TenantAutomationSettingsController;
 use App\Http\Controllers\TenantWhatsAppIntegrationController;
 use App\Http\Controllers\WebhookController;
@@ -58,6 +59,8 @@ Route::prefix('v1')->group(function () {
                 ->get();
             return response()->json(['success' => true, 'data' => $users, 'meta' => [], 'message' => 'Users fetched']);
         });
+
+        Route::get('/analytics/overview', [AnalyticsController::class, 'overview']);
 
         Route::get('/pipeline', [PipelineController::class, 'index']);
         Route::get('/pipelines', [PipelineController::class, 'index']);

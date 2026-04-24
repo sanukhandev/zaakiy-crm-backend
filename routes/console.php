@@ -36,3 +36,4 @@ Artisan::command('app:schema-check', function () {
 );
 
 Schedule::command('app:aggregate-analytics')->hourly();
+Schedule::job(new \App\Jobs\ReconcileMessageStatusJob())->everyFiveMinutes();
