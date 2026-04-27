@@ -32,6 +32,14 @@ class MessagingStabilityTest extends TestCase
 
         $leadRepository->shouldReceive('incrementUnreadCount')->once()->with('tenant-1', 'lead-1');
         $leadRepository->shouldReceive('updateLeadConversationMetadata')->once()->with('tenant-1', 'lead-1', 'inbound');
+        $leadRepository
+            ->shouldReceive('updateActivityTimestamps')
+            ->once()
+            ->with(
+                'tenant-1',
+                'lead-1',
+                Mockery::on(fn (array $payload): bool => isset($payload['last_inbound_at'], $payload['last_activity_at'])),
+            );
 
         $service = new MessageService($messageRepository, $leadRepository);
 
