@@ -906,12 +906,10 @@ class LeadRepository
                 return null;
             }
 
-            $isExpired = empty($lead->conversation_lock_expires_at)
-                || now()->greaterThan($lead->conversation_lock_expires_at);
             $isSameOwner = !empty($lead->conversation_owner_id) && (string) $lead->conversation_owner_id === $userId;
             $isUnowned = empty($lead->conversation_owner_id);
 
-            if (!($isUnowned || $isExpired || $isSameOwner)) {
+            if (!($isUnowned || $isSameOwner)) {
                 return $lead;
             }
 
@@ -967,11 +965,7 @@ class LeadRepository
             return false;
         }
 
-        if (empty($lead->conversation_owner_id) || empty($lead->conversation_lock_expires_at)) {
-            return true;
-        }
-
-        if (now()->greaterThan($lead->conversation_lock_expires_at)) {
+        if (empty($lead->conversation_owner_id)) {
             return true;
         }
 

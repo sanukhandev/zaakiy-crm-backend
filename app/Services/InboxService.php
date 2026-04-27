@@ -23,12 +23,10 @@ class InboxService
         }
 
         $isOwnedByOther = !empty($lead->conversation_owner_id)
-            && (string) $lead->conversation_owner_id !== $dto->userId
-            && !empty($lead->conversation_lock_expires_at)
-            && now()->lessThan($lead->conversation_lock_expires_at);
+            && (string) $lead->conversation_owner_id !== $dto->userId;
 
         if ($isOwnedByOther) {
-            throw new \RuntimeException('Conversation currently locked by another user');
+            throw new \RuntimeException('Conversation is already claimed by another user');
         }
 
         return $lead;
@@ -65,7 +63,7 @@ class InboxService
     public function assertCanSend(string $tenantId, string $leadId, string $userId): void
     {
         if (!$this->leadRepository->canUserSendInConversation($tenantId, $leadId, $userId)) {
-            throw new \RuntimeException('Conversation is currently locked by another user');
+            throw new \RuntimeException('Only the claimed user can continue this conversation');
         }
     }
 }
