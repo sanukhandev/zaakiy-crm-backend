@@ -111,7 +111,7 @@ class LeadActivityService
         return $this->repository->create(
             $tenantId,
             $leadId,
-            'stage_changed',
+            'status_change',
             sprintf('Moved from %s to %s', $previousStageName, $newStageName),
             $createdBy,
         );
