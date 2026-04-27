@@ -123,4 +123,33 @@ class MessagingStabilityTest extends TestCase
         $this->assertTrue($method->invoke($repository, 'sent', 'delivered'));
         $this->assertTrue($method->invoke($repository, 'delivered', 'read'));
     }
+
+    public function test_stage_change_activity_uses_compatible_enum_value(): void
+    {
+        $repository = Mockery::mock(\App\Repositories\LeadActivityRepository::class);
+
+        $repository
+            ->shouldReceive('create')
+            ->once()
+            ->with(
+                'tenant-1',
+                'lead-1',
+                'status_change',
+                'Moved from Contacted to New',
+                'user-1',
+            )
+            ->andReturn((object) ['id' => 'activity-1']);
+
+        $service = new LeadActivityService($repository);
+
+        $result = $service->logStageChange(
+            'tenant-1',
+            'lead-1',
+            'New',
+            'Contacted',
+            'user-1',
+        );
+
+        $this->assertSame('activity-1', $result->id);
+    }
 }
