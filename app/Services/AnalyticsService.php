@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Repositories\AnalyticsMetricRepository;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class AnalyticsService
@@ -11,35 +12,110 @@ class AnalyticsService
         protected AnalyticsMetricRepository $repository,
     ) {}
 
-    public function getOverview(string $tenantId): array
+    public function getOverview(string $tenantId, array $filters = []): array
     {
-        $metricDate = now()->toDateString();
+        $today = now()->toDateString();
+        $rangeStart = !empty($filters['date_from'])
+            ? Carbon::parse((string) $filters['date_from'])->startOfDay()
+            : now()->subDays(29)->startOfDay();
+        $rangeEnd = !empty($filters['date_to'])
+            ? Carbon::parse((string) $filters['date_to'])->endOfDay()
+            : now()->endOfDay();
 
-        $metrics = DB::table('analytics_metrics')
+        $baseQuery = DB::table('leads')
             ->where('tenant_id', $tenantId)
-            ->where('metric_date', $metricDate)
-            ->get()
-            ->keyBy(fn ($row) => $row->metric_key . ':' . ($row->dimension ?? ''));
+            ->whereNull('deleted_at')
+            ->whereBetween('created_at', [$rangeStart, $rangeEnd]);
 
-        $get = fn (string $key, ?string $dim = null) => (float) ($metrics[$key . ':' . ($dim ?? '')]->metric_value ?? 0);
+        if (!empty($filters['source'])) {
+            $baseQuery->where('source', (string) $filters['source']);
+        }
 
-        $sourceBreakdown = DB::table('analytics_metrics')
-            ->where('tenant_id', $tenantId)
-            ->where('metric_key', 'source_breakdown')
-            ->where('metric_date', $metricDate)
-            ->whereNotNull('dimension')
-            ->pluck('metric_value', 'dimension')
-            ->map(fn ($v) => (int) $v)
-            ->toArray();
+        $rows = $baseQuery
+            ->select(['status', 'source', 'created_at'])
+            ->orderByDesc('created_at')
+            ->get();
+
+        $totalLeads = $rows->count();
+        $qualifiedLeads = $rows->filter(fn ($lead) => in_array($lead->status, ['qualified', 'proposal', 'closed_won', 'won'], true))->count();
+        $wonLeads = $rows->filter(fn ($lead) => in_array($lead->status, ['won', 'closed_won'], true))->count();
+        $dailyLeadCount = $rows->filter(fn ($lead) => str_starts_with((string) $lead->created_at, $today))->count();
+        $conversionRate = $totalLeads > 0 ? round(($wonLeads / $totalLeads) * 100, 2) : 0.0;
+
+        $statusCounts = [];
+        $sourceCounts = [];
+        $trendMap = [];
+
+        foreach ($rows as $lead) {
+            $status = (string) $lead->status;
+            $statusCounts[$status] = ($statusCounts[$status] ?? 0) + 1;
+
+            $source = $lead->source ? (string) $lead->source : 'unknown';
+            $sourceCounts[$source] = ($sourceCounts[$source] ?? 0) + 1;
+
+            $dateKey = Carbon::parse((string) $lead->created_at)->toDateString();
+            $trendMap[$dateKey] = ($trendMap[$dateKey] ?? 0) + 1;
+        }
+
+        $dailyTrend = [];
+        $cursor = $rangeStart->copy()->startOfDay();
+        $trendEnd = $rangeEnd->copy()->startOfDay();
+
+        while ($cursor->lte($trendEnd)) {
+            $key = $cursor->toDateString();
+            $dailyTrend[] = [
+                'date' => $key,
+                'label' => $cursor->format('M j'),
+                'leads' => (int) ($trendMap[$key] ?? 0),
+            ];
+            $cursor->addDay();
+        }
+
+        $chartData = collect($statusCounts)
+            ->map(fn ($value, $status) => ['status' => $status, 'value' => (int) $value])
+            ->values()
+            ->all();
+
+        $sourceChartData = collect($sourceCounts)
+            ->map(fn ($value, $source) => ['source' => $source, 'value' => (int) $value])
+            ->values()
+            ->all();
+
+        $stagePerformance = collect($statusCounts)
+            ->map(fn ($value, $status) => [
+                'status' => $status,
+                'value' => (int) $value,
+                'share' => $totalLeads > 0 ? round(((int) $value / $totalLeads) * 100, 1) : 0,
+            ])
+            ->sortByDesc('value')
+            ->values()
+            ->all();
+
+        $topSources = collect($sourceCounts)
+            ->map(fn ($value, $source) => [
+                'source' => $source,
+                'value' => (int) $value,
+                'share' => $totalLeads > 0 ? round(((int) $value / $totalLeads) * 100, 1) : 0,
+            ])
+            ->sortByDesc('value')
+            ->values()
+            ->all();
 
         return [
-            'date'              => $metricDate,
-            'total_leads'       => (int) $get('leads_count'),
-            'qualified_leads'   => (int) $get('qualified_leads'),
-            'won_leads'         => (int) $get('won_leads'),
-            'daily_lead_count'  => (int) $get('daily_lead_count'),
-            'conversion_rate'   => (float) $get('conversion_rate'),
-            'source_breakdown'  => $sourceBreakdown,
+            'overview' => [
+                'date' => $today,
+                'total_leads' => $totalLeads,
+                'qualified_leads' => $qualifiedLeads,
+                'won_leads' => $wonLeads,
+                'daily_lead_count' => $dailyLeadCount,
+                'conversion_rate' => $conversionRate,
+                'source_breakdown' => $sourceCounts,
+            ],
+            'chartData' => $chartData,
+            'sourceChartData' => $sourceChartData,
+            'dailyTrend' => $dailyTrend,
+            'stagePerformance' => $stagePerformance,
+            'topSources' => $topSources,
         ];
     }
 

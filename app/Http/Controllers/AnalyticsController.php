@@ -25,7 +25,11 @@ class AnalyticsController extends Controller
             return $this->failure('Unauthorized', null, [], 401);
         }
 
-        $data = $this->analyticsService->getOverview($auth['tenant_id']);
+        $data = $this->analyticsService->getOverview($auth['tenant_id'], [
+            'date_from' => $request->query('date_from'),
+            'date_to' => $request->query('date_to'),
+            'source' => $request->query('source'),
+        ]);
 
         return $this->success($data, 'Analytics overview fetched successfully');
     }
